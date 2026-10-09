@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#71d6ff">
+    <title>BOOST THE GRID — District Heating GridBooster Simulator</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="BOOST THE GRID home"><span class="brand-mark">BG</span><span>BOOST THE GRID<span class="brand-sub">District Heating GridBooster Simulator</span></span></a>
+      <div class="top-meta"><span class="pixel-tag">FIELD TOOL 01</span><span class="local-state"><i></i> LOCAL CALCULATION</span></div>
+    </header>
+
+    <main id="top">
+      <section class="mode-selector-panel" aria-label="Choose simulator difficulty and audience mode">
+        <div class="mode-selector-heading"><div><p class="eyebrow">DIFFICULTY / AUDIENCE</p><h2>CHOOSE YOUR MODE</h2></div><p>Pick the level of simulator detail.</p></div>
+        <div class="mode-selector" role="group" aria-label="Simulator mode">
+          <button id="mode-casual" class="mode-choice" type="button" data-mode="casual" aria-pressed="false"><span>CASUAL</span><small>Simplified controls · plain language</small></button>
+          <button id="mode-engineer" class="mode-choice" type="button" data-mode="engineer" aria-pressed="true"><span>ENGINEER</span><small>Full engineering simulator</small></button>
+          <button id="mode-consult" class="mode-choice" type="button" data-mode="consult" aria-pressed="false"><span>CONSULT</span><small>Consultancy analysis</small></button>
+        </div>
+      </section>
+      <section class="hero">
+        <div class="hero-copy"><p class="eyebrow"><span class="coin">✦</span> CONCEPT / PRE-FEASIBILITY</p>
+          <h1>TUNE THE GRID.<br><span>BOOST</span><br><span>LOCALLY.</span></h1>
+          <p class="hero-positioning">A concept and pre-feasibility tool for temperature-flexible district-heating networks.</p>
+          <p class="hero-lede">Explore how lower network temperatures, waste-heat upgrading and local GridBoosters can work together in a district-heating network.</p>
+          <div class="hero-pills"><span>01 / SET HMP</span><span>02 / EXPLORE BRANCHES</span><span>03 / BOOST A PATH</span></div>
+        </div>
+        <div class="hero-art" aria-hidden="true"><div class="sun"></div><div class="cloud cloud-a"></div><div class="cloud cloud-b"></div><div class="hill hill-back"></div><div class="hill hill-front"></div><div class="hero-pipe"><span>78°</span><b>↗</b><span>85°</span></div><div class="block block-a">+</div><div class="block block-b">!</div></div>
+      </section>
+
+      <section id="network-simulator" class="network-simulator" aria-labelledby="network-title">
+        <details id="how-to-play" class="how-to-play panel"><summary><span class="how-to-title">HOW TO PLAY</span><span>7 steps · quick demo under one minute</span></summary><div class="how-to-body"><ol><li><b>SET THE HMP</b><span>Choose the target temperature for the hydraulic midpoint.</span></li><li><b>CHECK THE SOURCES</b><span>Set central-plant conditions and data-center waste heat.</span></li><li><b>EXPLORE THE BRANCHES</b><span>Compare each branch’s heat demand, flow, minimum supply, and fixed HMP-to-branch loss.</span></li><li><b>ADD GRIDBOOSTERS</b><span>Click ADD GRIDBOOSTER, then drag it onto a branch. Check lift, duty, electricity, and outlet temperature.</span></li><li><b>TEST DATA-CENTER OPTIONS</b><span>Compare Direct, One-stage heat pump, and Two-stage heat pump paths.</span></li><li><b>LOWER THE HMP</b><span>Watch waste heat unlock while critical branches and booster electricity change.</span></li><li><b>COMPARE STRATEGIES</b><span>Use the HMP sweep to compare source use, central production, electricity, and operating cost.</span></li></ol><div class="quick-demo"><div><b>QUICK DEMO</b><p id="quick-demo-status">Load four real-model scenarios: high temperature, local boosting, two-stage heat pump, and aggressive low temperature.</p></div><button id="quick-demo-start" type="button">▶ LOAD DEMO</button><button id="quick-demo-next" type="button" disabled>NEXT STEP →</button></div></div></details>
+        <section id="consult-panel" class="consult-panel panel" aria-labelledby="consult-title" hidden><p class="eyebrow">CONFIDENTLY SIMPLIFIED · CLEARLY SATIRE</p><h2 id="consult-title">Consultancy analysis</h2><p>Run a premium-grade strategic review with absolutely no engineering inputs.</p><button id="consult-run" class="consult-run" type="button">▶ RUN CONSULTANCY ANALYSIS</button><div id="consult-loading" class="consult-loading" role="status" aria-live="polite" hidden>Aligning stakeholders…</div><div id="consult-result" class="consult-result" hidden><div class="consult-kpis"><article><span>Strategic alignment</span><b id="consult-kpi-alignment">100%</b></article><article><span>Innovation potential</span><b id="consult-kpi-innovation">VERY HIGH</b></article><article><span>Investment recommendation</span><b id="consult-kpi-investment">YES</b></article><article><span>Further consulting recommended</span><b id="consult-kpi-consulting">STRONGLY</b></article></div><div id="consult-followup" hidden><p class="consult-conclusion">The Booster solves most technical problems in a district heating network and is therefore clearly worth investing in.</p><p>Further workshops recommended · stakeholder alignment required · synergy potential: significant.</p></div></div></section>
+        <div class="section-heading simulator-heading"><div><p class="eyebrow">NETWORK SCENARIO / LIVE</p><h2 id="network-title">District heating GridBooster simulator</h2><p id="scenario-description" class="scenario-description"></p></div>
+          <label class="scenario-select">LOAD DEMO <select id="scenario-select" aria-label="Load demo scenario"></select></label>
+        </div>
+        <p class="engineer-purpose engineer-only">Engineer mode evaluates HMP temperature strategy, waste-heat upgrading, local GridBoosters, central production, electricity, operating cost and branch feasibility. <b>Which combination gives a technically feasible and economically sensible network operating point?</b></p>
+        <ol class="engineer-workflow engineer-only" aria-label="Engineer workflow"><li><b>01</b> Set network target</li><li><b>02</b> Set heat sources</li><li><b>03</b> Inspect branch requirements</li><li><b>04</b> Place GridBoosters</li><li><b>05</b> Compare HMP strategies</li><li><b>06</b> Compare cost and electricity</li></ol>
+        <p class="model-notice"><strong>CONCEPT / PRE-FEASIBILITY ONLY</strong> Uses fixed source-to-HMP and HMP-to-branch ΔT losses and a simplified network return-temperature reference. No hydraulic pressure simulation, flow-dependent pipe heat transfer, return-network mixing, dynamic thermal storage, or detailed pump-electricity model. Heat pumps use simplified constant COP; no compressor-map capacity derating. HMP temperature capability and thermal capacity are separate; no mixed HMP temperature is calculated in strict mode. GridBooster compressor electricity is additional electric input; its heat is not credited against upstream production. Experimental blending estimates source mixing from power and one common return reference using constant cp and density. No hydraulic mixing, source pump curves, pressure balance, hydraulic dispatch, transient ramping, thermal inertia or plant efficiency maps are modeled. Plant ramp cost is a simplified variable penalty.</p>
+        <section id="normal-economics" class="normal-economics panel" aria-label="Simple operating cost" hidden><b>OPERATING COST · CURRENT SCENARIO</b><span>Central heat <strong id="normal-cost-central">—</strong></span><span>Electricity <strong id="normal-cost-electric-power">—</strong> kW · <strong id="normal-cost-electric">—</strong></span><span>Waste heat <strong id="normal-cost-waste">—</strong></span><span>Total <strong id="normal-cost-total">—</strong></span><small>€/h · simplified operating cost only</small></section>
+        <div class="simulator-grid">
+          <aside class="sim-controls panel">
+            <div class="panel-title"><span class="tile-icon blue">01</span><div><p class="eyebrow">SYSTEM SETUP</p><h3>Set the operating point</h3><p>One input set drives the live view and every HMP sweep point.</p></div></div><p class="casual-concept">Lower the network temperature to unlock more low-temperature heat. Boost only the branches that need hotter supply.</p>
+            <div class="control-group"><h4>SYSTEM TARGET</h4>
+              <label class="sim-field hmp-number-field">HMP target supply temperature<div class="sim-input"><input id="hmp-target" type="number" min="70" max="95" step="any"><b>°C</b></div></label>
+              <label class="hmp-slider-field" for="hmp-target-slider"><span>HMP TARGET · TEMPERATURE FLEX</span><b><output id="hmp-slider-value">—</output> °C</b><input id="hmp-target-slider" type="range" min="70" max="95" step="1" value="80" aria-label="HMP target temperature"></label>
+              <label class="sim-field engineer-only">Outdoor temperature <span class="context-tag">CONTEXT ONLY</span><div class="sim-input blue-input"><input id="outdoor-temp" type="number" step="any"><b>°C</b></div></label>
+              <small class="outdoor-context-note engineer-only">Branch demand, source availability and HMP target do not change with this value.</small>
+              <label class="sim-field engineer-only">Network return temperature <div class="sim-input blue-input"><input id="network-return-temp" type="number" step="any" value="40"><b>°C</b></div></label>
+              <details class="reference-delta-details engineer-only"><summary>OPTIONAL REFERENCE NETWORK ΔT · REFERENCE ONLY</summary><label class="sim-field">Comparison value<div class="sim-input blue-input"><input id="network-reference-delta" type="number" min="0" step="any" placeholder="optional"><b>K</b></div></label><small>Diagnostic comparison only; does not change the calculated supply-minus-return ΔT.</small></details>
+              <small class="return-input-note engineer-only">Network ΔT is HMP target supply minus this simplified return reference; no return mixing is modeled.</small>
+            </div>
+            <div class="control-group"><h4>CENTRAL HEAT PLANT</h4>
+              <label class="sim-field">Network supply temperature<div class="sim-input hot-input"><input id="plant-temp" type="number" step="any"><b>°C</b></div></label>
+              <label class="sim-field">Maximum plant thermal power<div class="sim-input"><input id="plant-power" type="number" min="0" step="any"><b>MWth</b></div></label>
+              <label class="sim-field engineer-only">Plant availability<div class="sim-input"><input id="plant-availability" type="number" min="0" max="100" step="any"><b>%</b></div></label>
+              <label class="sim-field engineer-only">Plant → HMP temperature loss<div class="sim-input blue-input"><input id="plant-loss" type="number" min="0" step="any"><b>K</b></div></label>
+            </div>
+            <div class="control-group"><h4>DATA-CENTER WASTE HEAT</h4>
+              <label class="sim-field">Source-path outlet temperature<div class="sim-input hot-input"><input id="dc-temp" type="number" step="any"><b>°C</b></div></label>
+              <label class="sim-field">Available raw source heat<div class="sim-input"><input id="dc-power" type="number" min="0" step="any"><b>MWth</b></div></label>
+              <label class="sim-field engineer-only">Availability<div class="sim-input"><input id="dc-availability" type="number" min="0" max="100" step="any"><b>%</b></div></label>
+              <label class="sim-field engineer-only">Data center → HMP temperature loss<div class="sim-input blue-input"><input id="dc-loss" type="number" min="0" step="any"><b>K</b></div></label>
+              <label class="sim-field">Data-center path mode<div class="sim-input select-input"><select id="dc-mode"><option value="direct">Direct waste heat</option><option value="one-stage">One-stage heat pump</option><option value="two-stage">Two-stage heat pump</option></select></div></label>
+              <small id="casual-hp-assumption" class="casual-hp-assumption" hidden></small>
+              <p class="source-mode-note">The comparison below estimates all three paths; this selection controls which one contributes to the HMP balance.</p>
+              <div class="dc-stage-inputs engineer-only"><b>ONE-STAGE HEAT PUMP CASE</b>
+                <label class="sim-field">Upgraded outlet temperature<div class="sim-input hot-input"><input id="dc-single-temp" type="number" step="any"><b>°C</b></div></label>
+                <label class="sim-field">One-stage heating COP<div class="sim-input"><input id="dc-single-cop" type="number" min="1.01" step="any"><b>—</b></div></label>
+              </div>
+              <div class="dc-stage-inputs engineer-only"><b>TWO-STAGE HEAT PUMP CASE</b>
+                <label class="sim-field">Stage 1 outlet temperature<div class="sim-input hot-input"><input id="dc-stage1-temp" type="number" step="any"><b>°C</b></div></label>
+                <label class="sim-field">Stage 1 heating COP<div class="sim-input"><input id="dc-stage1-cop" type="number" min="1.01" step="any"><b>—</b></div></label>
+                <label class="sim-field">Stage 2 outlet temperature<div class="sim-input hot-input"><input id="dc-stage2-temp" type="number" step="any"><b>°C</b></div></label>
+                <label class="sim-field">Stage 2 heating COP<div class="sim-input"><input id="dc-stage2-cop" type="number" min="1.01" step="any"><b>—</b></div></label>
+              </div>
+            </div>
+            <details class="advanced-source-strategy engineer-only"><summary>ADVANCED SOURCE STRATEGY · EXPERIMENTAL</summary>
+              <label class="sim-field">Source temperature strategy<div class="sim-input select-input"><select id="source-temperature-strategy"><option value="strict">STRICT TEMPERATURE ELIGIBILITY</option><option value="blended">BLENDED SOURCE / PLANT RAMPING</option></select></div></label>
+              <label class="sim-field">Normal plant supply temperature<div class="sim-input hot-input"><input id="normal-plant-supply" type="number" step="any" value="90"><b>°C</b></div></label>
+              <label class="sim-field">Maximum ramped plant supply temperature<div class="sim-input hot-input"><input id="max-ramped-plant-supply" type="number" step="any" value="105"><b>°C</b></div></label>
+              <label class="sim-field">Plant temperature ramp cost<div class="sim-input"><input id="plant-ramp-cost" type="number" min="0" step="any" value="0.50"><b>€/MWhth/K</b></div></label>
+              <small>Strict eligibility remains the default. Blending is a simplified source-mixing estimate and must pass the cost and ramp-limit checks.</small>
+            </details>
+            <div class="control-group"><h4>GRIDBOOSTER DEFAULTS</h4>
+              <label class="sim-field">Default drop branch<div class="sim-input select-input"><select id="booster-branch"><option value="none">Drop zone / unplaced</option><option value="A">Branch A</option><option value="B">Branch B</option><option value="C">Branch C</option><option value="D">Branch D</option><option value="E">Branch E</option><option value="F">Branch F</option></select></div></label>
+              <label class="sim-field engineer-only">Booster setpoint mode<div class="sim-input select-input"><select id="booster-mode"><option value="target">Target branch temperature</option><option value="lift">Temperature lift</option></select></div></label>
+              <label class="sim-field engineer-only"><span id="booster-setpoint-label">Target branch supply</span><div class="sim-input hot-input"><input id="booster-setpoint" type="number" step="any"><b id="booster-setpoint-unit">°C</b></div></label>
+              <label class="sim-field engineer-only">Local booster heating COP<div class="sim-input"><input id="network-cop" type="number" min="1.01" step="any"><b>—</b></div></label>
+              <label class="sim-field engineer-only">Maximum booster thermal capacity<div class="sim-input"><input id="booster-capacity" type="number" min="0" step="any"><b>kWth</b></div></label>
+              <button id="add-gridbooster" class="add-gridbooster" type="button">＋ ADD GRIDBOOSTER</button>
+              <div id="gridbooster-tray" class="gridbooster-tray" aria-live="polite"></div>
+            </div>
+            <div class="control-group branch-inputs-group engineer-only"><h4>BRANCHES A–F</h4><p>Set customer demand, minimum supply, flow and fixed HMP-to-branch ΔT loss.</p><div id="branch-controls" class="branch-controls"></div></div>
+          </aside>
+
+          <div class="network-main">
+            <div id="network-validation" class="network-validation" role="alert" hidden></div>
+            <section class="network-map panel" aria-labelledby="map-title">
+              <div class="section-heading map-heading"><div><p class="eyebrow">STEP 2 · LIVE NETWORK</p><h3 id="map-title">Central heat plant → HMP ← data-center source → Branches A–F</h3><p>Inspect source losses, temperature capability, branch limits and placed GridBoosters.</p></div><div class="map-tags"><span id="outdoor-context" class="outdoor-context">—</span><span class="pixel-tag">LIVE VIEW</span></div></div>
+              <div id="hmp-capacity-warning" class="hmp-capacity-warning" role="status" aria-live="polite" hidden></div>
+              <div class="network-topology">
+                <div id="network-branches-top" class="network-branches branch-bank branch-bank-top" aria-label="Branches A to C above HMP"></div>
+                <div class="hmp-distribution"><span class="down-arrow">↕</span><b>HMP TEMPERATURE CAPABILITY → BRANCH CONNECTIONS</b><span id="map-main-temp" class="hmp-pipe-temp">—</span></div>
+                <div class="source-network">
+                  <div class="plant-arm"><div class="plant-node map-node"><span class="plant-icon">♨</span><b>CENTRAL<br>HEAT PLANT</b><strong id="map-production-temp">—</strong><small id="map-plant-contribution">—</small><small id="map-production-power">—</small><small id="map-plant-availability">—</small><span id="map-plant-status" class="mini-status">—</span></div><div id="plant-feed-pipe" class="source-pipe plant-pipe"><span id="map-plant-loss" class="engineer-only">—</span><b>▶</b></div></div>
+                  <div id="hmp-node" class="hmp-central map-node"><span class="hmp-icon">HMP</span><b>HYDRAULIC MIDPOINT</b><strong id="map-hmp-temp">—</strong><small id="map-hmp-target">—</small><small id="map-hmp-method-note">TEMPERATURE CAPABILITY · NOT A MIXED HMP RESULT</small><span id="map-hmp-status" class="mini-status">—</span></div>
+                  <div class="dc-arm"><div id="dc-feed-pipe" class="source-pipe dc-pipe"><b>◀</b><span id="map-dc-loss" class="engineer-only">—</span></div><div class="dc-node map-node"><span class="dc-icon">▦</span><b>DATA-CENTER<br>HEAT SOURCE</b><strong id="map-dc-temp">—</strong><small id="map-dc-contribution">—</small><small id="map-dc-power">—</small><small id="map-dc-availability">—</small><span id="map-dc-status" class="mini-status">—</span></div></div>
+                </div>
+                <div id="network-branches" class="branch-network-stack">
+                <div class="distribution-spine"><span>HMP NODE</span><i></i><b>↓</b></div>
+                <div id="network-branches-bottom" class="network-branches branch-bank branch-bank-bottom" aria-label="Branches D to F below HMP"></div></div>
+                <div class="network-status-legend"><span>✓ FEASIBLE</span><span>◇ CLOSE · 0–2 K</span><span>! BELOW MINIMUM</span><span>⚡ BOOSTER ACTIVE</span><span>★ SELECTED BRANCH</span><span>▶ SOURCE INJECTING</span><span>⛔ SOURCE BLOCKED</span></div>
+              </div>
+              <p class="loss-placeholder engineer-only"><b>LOSS MODEL</b> Fixed user-entered ΔT per connection; no flow-dependent pipe heat transfer or return-temperature mixing is modeled.</p>
+            </section>
+
+            <section id="current-strategy-strip" class="current-strategy-strip engineer-only" aria-label="Current system strategy summary">
+              <header><b>CURRENT STRATEGY</b><span id="kpi-hmp">—</span></header>
+              <div><span>HMP</span><b id="kpi-hmp-target">—</b></div><div><span>WASTE-HEAT SHARE</span><b id="kpi-waste-share">—</b></div>
+              <div><span>CENTRAL-HEAT SHARE</span><b id="kpi-central-share">—</b></div><div><span>BRANCHES NEEDING LIFT</span><b id="kpi-branch-lift">—</b></div>
+              <div><span>TOTAL ELECTRICITY</span><b id="kpi-electricity">—</b></div><div><span>OPERATING COST</span><b id="kpi-cost">—</b></div>
+            </section>
+
+            <section id="system-summary" class="system-summary engineer-only" aria-labelledby="system-summary-title">
+              <div class="section-heading compact-section-heading"><div><p class="eyebrow">STEP 3 · CURRENT SYSTEM SUMMARY</p><h3 id="system-summary-title">One operating point, six system views</h3></div><span class="pixel-tag">LIVE MODEL</span></div>
+              <div class="system-summary-grid">
+                <article class="system-card hmp-system-card"><header><b>HMP</b><span id="result-hmp-state">—</span></header><strong><span id="result-hmp">—</span> °C target</strong><div><span id="summary-hmp-capability-label">Temperature capability</span> <b><span id="result-hmp-capability">—</span> °C</b></div><div>Network return <b><span id="summary-return-temp">—</span> °C</b></div><div>Network ΔT <b><span id="summary-network-delta">—</span> K</b></div><small id="summary-return-note">Simplified return reference · no mixing modeled</small></article>
+                <article class="system-card central-system-card"><header><b>CENTRAL HEAT</b><span>THERMAL</span></header><strong><span id="result-plant-used">—</span> MWth actual</strong><div>Required <b><span id="result-central">—</span> MWth</b></div><div>Available <b><span id="summary-central-available">—</span> MWth</b></div><div>Share of customer heat <b id="summary-central-share">—</b></div><small><span id="result-plant-shortfall">—</span> MWth central capacity shortfall</small></article>
+                <article class="system-card waste-system-card"><header><b>DATA-CENTER HEAT</b><span id="summary-selected-path">—</span></header><strong><span id="result-waste-usable">—</span> MWth heat injected</strong><div>Raw source heat available <b><span id="result-waste-available">—</span> MWth</b></div><div>Raw source heat used <b><span id="summary-source-used">—</span> MWth</b></div><div>Source utilization <b id="summary-source-utilization">—</b></div><div>Heat-pump delivered heat <b><span id="summary-hp-output">—</span> MWth</b></div><div>Electric input <b><span id="summary-hp-electric">—</span> kWe</b></div><div>Temperature eligible <b id="result-waste-eligibility">—</b></div><small>Heat-pump capacity limit NOT MODELED · source limited <b id="summary-source-limited">—</b> · temperature limited <b id="summary-temperature-limited">—</b></small></article>
+                <article class="system-card branch-system-card"><header><b>BRANCHES</b><span>A–F</span></header><strong><span id="result-feasible-without">—</span> / 6 feasible without boosters</strong><div>Need local lift <b id="result-needs-booster">—</b></div><div>Feasible with installed boosters <b><span id="result-feasible">—</span> / 6</b></div><small><span id="result-critical">—</span> remain below minimum after installed boosting</small></article>
+                <article class="system-card booster-system-card"><header><b>GRIDBOOSTERS</b><span>INSTALLED ≠ HYPOTHETICAL</span></header><strong><span id="summary-booster-count">—</span> installed</strong><div>Installed thermal duty <b><span id="result-booster-thermal">—</span> kWth</b></div><div>Installed electricity <b><span id="result-booster-electric">—</span> kWe</b></div><div>Additional hypothetical duty <b><span id="summary-hypothetical-duty">—</span> kWth</b></div><div>Additional hypothetical electricity <b><span id="summary-hypothetical-electric">—</span> kWe</b></div><small id="result-booster-capacity">—</small></article>
+                <article class="system-card electricity-system-card"><header><b>ELECTRICITY / COST</b><span>OPERATING POINT</span></header><strong><span id="summary-total-electric">—</span> kWe total</strong><div>Data-center HP <b><span id="summary-hp-electric-total">—</span> kWe</b></div><div>GridBoosters <b><span id="summary-gb-electric-total">—</span> kWe</b></div><div>Operating cost <b><span id="summary-operating-cost">—</span> €/h</b></div><small>Simplified variable operating cost</small></article>
+              </div>
+              <section class="source-share-panel" aria-labelledby="source-share-title"><header><div><p class="eyebrow">HEAT-SOURCE SHARE</p><h4 id="source-share-title">Customer heat demand balance</h4></div><b id="energy-caption">—</b></header><div id="energy-split" class="energy-split"></div><p class="energy-footnote">Shares use total customer demand as the denominator. Any unserved requirement remains visible as its own segment.</p></section>
+              <div class="system-energy-balance" aria-label="Current system thermal energy balance"><div class="balance-equation"><span>CUSTOMER HEAT DEMAND <b id="balance-demand">—</b></span><i>=</i><span>CENTRAL HEAT <b id="balance-central">—</b></span><i>+</i><span>DATA-CENTER HEAT INJECTED <b id="balance-data-center">—</b></span><i id="balance-unserved-plus" hidden>+</i><span id="balance-unserved-item" hidden>UNSERVED <b id="balance-unserved">—</b></span></div><div class="balance-booster"><b>LOCAL GRIDBOOSTERS</b><span><strong id="balance-booster-thermal">—</strong> kWth local temperature lift</span><span><strong id="balance-booster-electric">—</strong> kWe compressor input</span></div></div>
+              <p class="booster-balance-note">GridBooster compressor electricity is reported as additional electric input. The current simplified thermal balance does not credit compressor heat against upstream heat production.</p>
+              <div class="return-diagnostic"><b>RETURN / ΔT</b><span>HMP supply <strong id="return-hmp-supply">—</strong></span><span>Network return <strong id="return-network-temp">—</strong></span><span>Network ΔT <strong id="return-network-delta">—</strong></span><small id="return-reference-status">Simplified return-temperature reference; no mixed return temperature is calculated.</small><div id="branch-return-diagnostics" hidden></div><small>Branch consistency is diagnostic only — branch demand remains the governing load input.</small></div>
+            </section>
+
+            <section id="hmp-temperature-flex" class="hmp-temperature-flex panel engineer-only" aria-labelledby="hmp-flex-title">
+              <div class="section-heading flex-heading"><div><p class="eyebrow">STEP 4 · STRATEGY / HMP SWEEP</p><h3 id="hmp-flex-title">Compare HMP operating points</h3><p>Every point uses the same live network model, sources, branches and installed GridBoosters.</p></div><span class="pixel-tag">SCENARIO SCAN</span></div>
+              <div class="flex-toolbar engineer-only">
+                <div class="sweep-range-controls"><b>SWEEP RANGE</b><label>From <span><input id="sweep-start" type="number" min="70" max="95" step="1" value="70"> °C</span></label><label>To <span><input id="sweep-end" type="number" min="70" max="95" step="1" value="95"> °C</span></label><label>Step <span><input id="sweep-step" type="number" min="0.1" max="25" step="any" value="1"> K</span></label></div>
+                <div class="flex-comparison-controls"><b>COMPARE OPERATING POINTS</b><div><input id="comparison-temp-input" type="number" min="70" max="95" step="any" value="82" aria-label="HMP temperature to compare"><button id="add-comparison-temp" type="button">＋ ADD</button><button id="add-current-temp" type="button">＋ CURRENT</button></div><div id="comparison-temp-chips" class="comparison-temp-chips"></div></div>
+              </div>
+              <div id="sweep-validation" class="sweep-validation" role="status" hidden></div>
+              <article class="flex-analysis-card key-points-panel"><header><b>KEY OPERATING POINTS</b><span>TRANSITIONS · NOT OPTIMA</span></header><div id="flex-key-points" class="flex-key-points"></div><div class="recommended-comparisons"><b>COMPARE THESE OPERATING POINTS</b><div id="recommended-comparison-buttons"></div></div></article>
+              <div class="flex-charts main-strategy-charts">
+                <article class="flex-chart-card"><header><b>A · USABLE WASTE HEAT</b><span>HEAT INJECTED · MW</span></header><svg id="flex-chart-waste" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus usable data-center heat"></svg></article>
+                <article class="flex-chart-card"><header><b>B · CENTRAL PRODUCTION</b><span>THERMAL OUTPUT · MW</span></header><svg id="flex-chart-central" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus central plant thermal production"></svg></article>
+                <article class="flex-chart-card"><header><b>C · TOTAL ELECTRICITY</b><span>DATA-CENTER HP + INSTALLED GRIDBOOSTERS · kWe</span></header><svg id="flex-chart-system-electric" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus total system electricity"></svg></article>
+                <article class="flex-chart-card"><header><b>D · OPERATING COST</b><span>SIMPLIFIED · €/h</span></header><svg id="flex-chart-cost" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus simplified operating cost"></svg></article>
+              </div>
+              <p class="flex-model-note">Only fully supported operating points are connected in these charts. Muted × markers identify temperature-unsupported or capacity-shortfall points; sweep values remain in the comparison matrix for context.</p>
+              <details class="strategy-table-details"><summary>Open strategy comparison matrix</summary><article class="flex-analysis-card strategy-table-card"><header><b>STRATEGY COMPARISON</b><span>SELECTED HMP POINTS · SAME NETWORK MODEL</span></header><div class="strategy-table-wrap"><table id="strategy-comparison-table" class="strategy-comparison-table"><thead id="strategy-table-head"></thead><tbody id="strategy-table-body"></tbody></table></div></article></details>
+              <p class="flex-model-note">Sweep assumption: fixed connection losses and the same selected heat-source path and booster placement are used at every HMP point. Additional GridBooster duty remains hypothetical.</p>
+            </section>
+
+            <section id="engineer-economics" class="engineer-economics panel engineer-only" aria-labelledby="economics-title">
+              <div class="section-heading compact-section-heading"><div><p class="eyebrow">STEP 5 · ECONOMICS</p><h3 id="economics-title">Current operating cost breakdown</h3><p>Raw waste heat and compressor electricity are costed separately.</p></div><span class="pixel-tag">€/h</span></div>
+              <div class="economics-layout"><div class="economic-inputs economic-inputs-main">
+                <label>Central heat production <span><input id="central-heat-cost" type="number" min="0" step="any" value="40"> €/MWh</span></label>
+                <label>Electricity price <span><input id="electricity-price" type="number" min="0" step="any" value="50"> €/MWh</span></label>
+                <label>Raw waste heat <span><input id="waste-heat-cost" type="number" min="0" step="any" value="5"> €/MWh</span></label>
+              </div><div class="economic-breakdown">
+                <div><span>Central heat cost <small>actual central heat × price</small></span><b id="cost-central-breakdown">—</b></div>
+                <div><span>Raw waste heat cost <small>raw source heat used × price</small></span><b id="cost-waste-breakdown">—</b></div>
+                <div><span>Data-center HP electricity <small>compressor input × electricity price</small></span><b id="cost-hp-breakdown">—</b></div>
+                <div><span>GridBooster electricity <small>installed booster input × electricity price</small></span><b id="cost-booster-breakdown">—</b></div>
+                <div><span>Plant ramping penalty</span><b id="cost-ramp-breakdown">—</b></div>
+                <div class="economic-total"><span>Total operating cost</span><b id="cost-total-breakdown">—</b></div>
+              </div></div><small class="economic-assumption-note">Variable operating cost only · excludes capital, maintenance and lifecycle economics. Prices are editable defaults, so these values are not an investment recommendation.</small>
+            </section>
+
+            <details id="advanced-analysis" class="advanced-analysis engineer-only">
+              <summary><span><b>06</b> ADVANCED ANALYSIS</span><small>Detailed diagnostics, branches, path comparisons and secondary charts</small></summary>
+              <div class="advanced-analysis-body">
+                <div id="flex-summary-cards" class="flex-summary-cards"></div>
+                <article class="flex-analysis-card"><header><b>DATA-CENTER PATH TEMPERATURE ZONES</b><span>AFTER DC → HMP LOSS</span></header><div id="flex-source-zones" class="flex-source-zones"></div><div class="zone-legend"><span>● can inject above target</span><span>○ blocked at or below target</span></div></article>
+                <article class="flex-analysis-card source-blending-panel"><header><b>SOURCE BLENDING</b><span>SIMPLIFIED SOURCE MIXING ESTIMATE</span></header><div id="source-blending-diagnostics">Strict temperature eligibility is active.</div><small>Source flows use one common simplified return-temperature reference. No hydraulic mixing or pressure-flow simulation.</small></article>
+                <div class="flex-charts advanced-charts">
+                  <article class="flex-chart-card"><header><b>GRIDBOOSTER THERMAL DUTY</b><span>HYPOTHETICAL + INSTALLED · kWth</span></header><svg id="flex-chart-booster-thermal" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus hypothetical and installed GridBooster thermal duty"></svg><small class="chart-series-legend">● Hypothetical additional · <i>●</i> Installed</small></article>
+                  <article class="flex-chart-card"><header><b>GRIDBOOSTER ELECTRICITY</b><span>HYPOTHETICAL + INSTALLED · kWe</span></header><svg id="flex-chart-booster-electric" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus hypothetical and installed GridBooster electricity"></svg><small class="chart-series-legend">● Hypothetical additional · <i>●</i> Installed</small></article>
+                  <article class="flex-chart-card"><header><b>DATA-CENTER HP ELECTRICITY</b><span>SELECTED PATH · kWe</span></header><svg id="flex-chart-dc-electric" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus data-center heat pump electricity"></svg></article>
+                  <article class="flex-chart-card"><header><b>BRANCHES REQUIRING BOOST</b><span>BRANCH COUNT</span></header><svg id="flex-chart-branches" viewBox="0 0 420 190" role="img" aria-label="HMP temperature versus branches requiring local boost"></svg></article>
+                </div>
+                <article class="flex-analysis-card branch-band-card"><header><b>BRANCH TEMPERATURE-CAPABILITY BANDS</b><span>BRANCH REQUIREMENT · HMP SWEEP</span></header><div id="flex-branch-bands" class="flex-branch-bands"></div></article>
+                <div class="network-viz-grid advanced-viz-grid"><section class="viz-card profile-viz panel"><div class="viz-title"><h3>Source and branch temperatures</h3><span>Plant · DC · HMP · A–F</span></div><svg id="temperature-profile" viewBox="0 0 640 210" role="img" aria-label="Plant and data-center source temperatures, HMP target and branch temperatures"></svg></section>
+                  <section class="viz-card panel"><div class="viz-title"><h3>Detailed data-center path comparison</h3><span>DIRECT · ONE-STAGE HEAT PUMP · TWO-STAGE HEAT PUMP</span></div><div id="data-center-mode-comparison" class="data-center-mode-comparison"></div><p class="dc-mode-explanation">Heating COP is Qout / Pel and Qout = Qsource + Pel. Connection losses determine temperature eligibility separately from theoretical heat cost. Compressor-map capacity limits are not modeled.</p></section>
+                </div>
+                <div class="network-viz-grid lower-viz-grid"><section class="viz-card panel"><div class="viz-title"><h3>Branch temperature check</h3><span>CAPABILITY VS MINIMUM</span></div><div id="branch-comparison" class="branch-comparison"></div><p class="branch-return-diagnostic-note">Diagnostic only — branch demand remains the governing load input.</p></section><section class="viz-card panel"><div class="viz-title"><h3>Without vs with booster</h3><span>SCENARIO DELTA</span></div><div id="before-after" class="before-after"></div></section></div>
+                <p class="flex-model-note">The model does not calculate return-network mixing, hydraulic pressure, flow-dependent pipe losses, dynamic storage or pump electricity. Branch return values, when entered, are diagnostic only.</p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <details id="booster-sizing" class="booster-details">
+        <summary><span><b>VP</b> Detailed VP-Booster sizing calculator</span><small>Direct and target mixed-outlet calculations · reverse modes · flow schematic</small></summary>
+      <section class="workbench" aria-label="Detailed VP-Booster sizing calculator">
+        <div class="section-heading"><div><p class="eyebrow">THE ENGINEERING CONSOLE</p><h2>VP-Booster sizing</h2></div><label class="case-select">LOAD EXAMPLE <select id="case-select" aria-label="Load example case"></select></label></div>
+        <div class="work-grid">
+          <form id="calc-form" class="panel input-panel">
+            <div class="panel-title"><span class="tile-icon blue">IN</span><div><h3>System inputs</h3><p>Enter the current operating point</p></div></div>
+            <div class="mode-switch" role="group" aria-label="Calculation mode"><button type="button" class="mode-button active" data-mode="direct" aria-pressed="true">DIRECT MODE</button><button type="button" class="mode-button" data-mode="target" aria-pressed="false">TARGET MIXED OUTLET</button></div>
+            <p id="mode-description" class="mode-description">Set the booster outlet temperature and see the resulting mixed supply.</p>
+            <div class="input-grid">
+              <label class="field"><span>Total network flow <em>V̇total</em></span><div class="input-wrap"><input name="totalFlow" type="number" min="0" step="any" value="206" required><b>m³/h</b></div></label>
+              <label class="field"><span>Network supply <em>Tin</em></span><div class="input-wrap"><input name="inletTemp" type="number" step="any" value="78" required><b>°C</b></div></label>
+              <label class="field"><span>Target mixed supply <em>Ttarget</em></span><div class="input-wrap"><input name="targetTemp" type="number" step="any" value="80" required><b>°C</b></div></label>
+              <label class="field"><span>Boosted partial flow <em>V̇boost</em></span><div class="input-wrap"><input name="boostFlow" type="number" min="0" step="any" value="64" required><b>m³/h</b></div></label>
+              <label class="field hot-field" id="booster-outlet-field"><span>Booster outlet <em>Tout,boost</em></span><div class="input-wrap"><input name="boostOutlet" type="number" step="any" value="85" required><b>°C</b></div></label>
+              <label class="field"><span>Heat-pump COP <em>COP</em></span><div class="input-wrap"><input name="cop" type="number" min="1.01" step="any" value="3" required><b>—</b></div></label>
+              <label class="field source-field"><span>Source-side inlet <em>Optional</em></span><div class="input-wrap"><input name="sourceTemp" type="number" step="any" placeholder="e.g. 20"><b>°C</b></div></label>
+            </div>
+            <div id="validation" class="validation" role="alert" aria-live="polite" hidden></div>
+            <div class="panel-foot"><span>WATER MODEL <b>ρ 1,000 kg/m³ · cp 4.186 kJ/kg·K</b></span><span>NO DATA LEAVES THIS DEVICE</span></div>
+          </form>
+
+          <section class="panel results-panel" aria-labelledby="results-title">
+            <div class="panel-title result-title"><span class="tile-icon red">OUT</span><div><h3 id="results-title">Calculated result</h3><p id="status-text">Live result from system inputs</p></div><span id="status-badge" class="status-badge">READY</span></div>
+            <div class="result-hero"><div><span class="result-label">MIXED OUTLET TEMPERATURE</span><strong id="mixed-result">—</strong></div><span class="unit">°C</span><div class="result-target">TARGET <b id="target-result">—</b> °C</div></div>
+            <div id="target-mode-result" class="target-mode-result" hidden>
+              <div class="required-outlet"><span>REQUIRED BOOSTER OUTLET</span><strong id="required-outlet-result">—</strong><b>°C</b></div>
+              <div class="dilution-callout"><span class="dilution-icon">!</span><p id="dilution-explanation">—</p></div>
+              <p id="extreme-warning" class="extreme-warning" role="status" hidden></p>
+            </div>
+            <div class="metric-grid">
+              <div class="metric"><span>BOOSTER THERMAL POWER</span><strong id="thermal-result">—</strong><small>kW</small></div>
+              <div class="metric"><span>HEAT-PUMP ELECTRIC</span><strong id="electric-result">—</strong><small>kW</small></div>
+              <div class="metric blue-metric"><span>SOURCE HEAT EXTRACTED</span><strong id="source-result">—</strong><small>kW</small></div>
+              <div class="metric"><span>BYPASS FLOW</span><strong id="bypass-result">—</strong><small>m³/h</small></div>
+              <div class="metric blue-metric"><span>BOOSTED-FLOW SHARE</span><strong id="share-result">—</strong><small>%</small></div>
+              <div class="metric hot-metric"><span>BOOSTER TEMPERATURE LIFT</span><strong id="lift-result">—</strong><small>K</small></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="target-chart-section" class="target-chart-section panel" aria-labelledby="target-chart-title" hidden>
+        <div class="section-heading chart-heading"><div><p class="eyebrow">TARGET MODE / FLOW SENSITIVITY</p><h2 id="target-chart-title">Less boosted flow means a hotter booster outlet.</h2></div><span class="pixel-tag">LIVE CURVE</span></div>
+        <p class="chart-note">Required booster outlet temperature for the current incoming and target temperatures. At zero boosted flow, any positive temperature rise would require an unbounded outlet; the plotted range starts at 1%.</p>
+        <div class="chart-container"><svg id="outlet-chart" viewBox="0 0 760 300" role="img" aria-labelledby="outlet-chart-label outlet-chart-desc"><title id="outlet-chart-label">Required booster outlet temperature versus boosted-flow share</title><desc id="outlet-chart-desc">The required outlet temperature decreases as boosted-flow share increases.</desc></svg></div>
+        <div class="chart-legend"><span><i class="legend-swatch curve-swatch"></i> Required booster outlet</span><span><i class="legend-swatch target-swatch"></i> Target mixed supply</span><span><i class="legend-swatch marker-swatch"></i> Current boosted-flow share</span></div>
+      </section>
+
+      <section class="schematic-panel panel" aria-labelledby="schematic-title">
+        <div class="section-heading schematic-heading"><div><p class="eyebrow">FLOW ROUTING / LIVE</p><h2 id="schematic-title">One stream. Two paths. One setpoint.</h2></div><span class="pixel-tag">PROCESS MAP</span></div>
+        <div class="flow-wrap">
+          <div class="flow-node network-node"><span class="node-icon">≈</span><b>NETWORK<br>SUPPLY</b><strong id="schematic-inlet">—</strong><small id="schematic-total">—</small></div>
+          <div class="pipe-segment inlet-pipe"><i></i><span class="flow-arrow">▶</span></div>
+          <div class="split-junction"><span>Y</span></div>
+          <div class="branch-area">
+            <div class="branch booster-branch"><div class="branch-line"><span id="schematic-boost-flow">—</span><i></i><b>▶</b></div><div class="machine"><div class="machine-screen"><span>HP</span><b>⚡</b></div><strong>BOOSTER</strong><small>POWER-UP STATION</small><div class="machine-lamp"></div></div><div class="branch-line hot-line"><i></i><span id="schematic-boost-out">—</span><b>▶</b></div></div>
+            <div class="branch bypass-branch"><div class="branch-line"><span id="schematic-bypass">—</span><i></i><b>▶</b></div><div class="bypass-label">BYPASS PIPE<br><small>unboosted flow</small></div><div class="branch-line"><i></i><b>▶</b></div></div>
+          </div>
+          <div class="merge-junction"><span>+</span></div>
+          <div class="pipe-segment outlet-pipe"><i></i><span class="flow-arrow">▶</span></div>
+          <div class="network-result"><span class="node-icon result-node-icon">★</span><b>MIXED<br>SUPPLY</b><strong id="schematic-mixed">—</strong><small>TARGET <span id="schematic-target">—</span></small></div>
+        </div>
+        <div class="schematic-legend"><span><i class="legend-dot blue-dot"></i> Water flow</span><span><i class="legend-dot red-dot"></i> Boosted hot side</span><span><i class="legend-dot yellow-dot"></i> Mixing point</span><span class="formula-note">Tmix = (Vboost × Tboost + Vbypass × Tin) / Vtotal</span></div>
+      </section>
+
+      <section class="reverse-section">
+        <div class="section-heading"><div><p class="eyebrow">SOLVE BACKWARDS</p><h2>Pick your unknown</h2></div><p class="section-note">Solve a target from the same mass and energy balances.</p></div>
+        <div class="reverse-grid">
+          <article class="reverse-card"><span class="reverse-number">01</span><h3>Required boosted flow</h3><p>How much flow must pass the booster to reach the target mix?</p><label class="reverse-input">Target mixed temperature <span><input id="reverse-flow-target" type="number" step="any" value="80"> °C</span></label><button type="button" data-solve="flow">SOLVE FLOW <b>↗</b></button><output id="reverse-flow-output">—</output></article>
+          <article class="reverse-card"><span class="reverse-number red-number">02</span><h3>Required booster outlet</h3><p>What outlet temperature reaches the target at this boosted flow?</p><label class="reverse-input">Target mixed temperature <span><input id="reverse-outlet-target" type="number" step="any" value="80"> °C</span></label><button type="button" data-solve="outlet">SOLVE OUTLET TEMP <b>↗</b></button><output id="reverse-outlet-output">—</output></article>
+          <article class="reverse-card power-card"><span class="reverse-number green-number">03</span><h3>Required booster power</h3><p>Thermal power for the selected flow and booster outlet temperatures.</p><div class="power-point"><span>OPERATING POINT</span><b id="power-point">—</b></div><button type="button" data-solve="power">CALCULATE POWER <b>↗</b></button><output id="reverse-power-output">—</output></article>
+        </div>
+        <p id="reverse-message" class="reverse-message" role="status" aria-live="polite"></p>
+      </section>
+      </details>
+
+      <footer><span>BOOST THE GRID · DISTRICT HEATING GRIDBOOSTER SIMULATOR <b>LOCAL</b></span><span>SCENARIO TOOL · WATER PROPERTIES ASSUMED CONSTANT</span><span>BUILT FOR THE HEAT GRID <i>▰</i></span></footer>
+    </main>
+    <script type="module" src="app.js"></script>
+    <script type="module" src="network-app.js"></script>
+  </body>
+</html>
