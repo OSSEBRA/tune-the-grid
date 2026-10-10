@@ -1,4 +1,4 @@
-import { calculate, calculateTargetMode, solveBoostFlow, solveBoostOutlet, validateInputs } from "./calculator.js";
+import { calculate, calculateTargetMode, solveBoostFlow, solveBoostOutlet, validateInputs } from "./calculator.js?v=20261010-1";
 
 const examples = [
   { name: "Reference · 206 m³/h", totalFlow: 206, inletTemp: 78, targetTemp: 80, boostFlow: 64, boostOutlet: 85, cop: 3, sourceTemp: 20 },

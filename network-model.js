@@ -4,6 +4,124 @@ export const KW_PER_M3H_K = WATER_DENSITY * WATER_CP / 3600;
 export const CLOSE_MARGIN_K = 2;
 export const BRANCH_IDS = ["A", "B", "C", "D", "E", "F"];
 
+// One raw data-center source can be allocated between HMP upgrading and direct return injection.
+export function splitDataCenterSource({ availableMW, supplyMW = 0, returnMW = 0, availabilityPercent = 100 }) {
+  const available = Number(availableMW);
+  const supply = Number(supplyMW);
+  const returned = Number(returnMW);
+  const availability = Number(availabilityPercent);
+  if (![available, supply, returned, availability].every(Number.isFinite)
+    || available < 0 || supply < 0 || returned < 0 || availability < 0 || availability > 100) {
+    throw new Error("Data-center source power and allocations must be non-negative, with availability from 0 to 100%.");
+  }
+  if (supply + returned > available + 1e-9) {
+    throw new Error("Data-center supply and return allocations cannot exceed available raw source heat.");
+  }
+  const allocatedMW = supply + returned;
+  return {
+    sourceId: "DATA-CENTER",
+    availableMW: available,
+    supplyMW: supply,
+    returnMW: returned,
+    unusedMW: Math.max(0, available - allocatedMW),
+    availabilityPercent: availability,
+    routing: supply > 0 && returned > 0 ? "BOTH" : supply > 0 ? "SUPPLY ONLY" : returned > 0 ? "RETURN ONLY" : "OFF"
+  };
+}
+
+export function isReturnSourceAvailableToConsumer(source, consumer) {
+  return Boolean(source?.enabled !== false && consumer?.enabled !== false
+    && source?.type === "WASTE_HEAT_SOURCE" && consumer?.type === "THREE_PIPE_CONSUMER"
+    && Number(source.order) < Number(consumer.order));
+}
+
+export function calculateThreePipeExtraction(consumer, availableKW) {
+  const demandKW = consumer.enabled === false ? 0 : Math.max(0, Number(consumer.demandKW) || 0);
+  const maxUptakeKW = Math.max(0, Number(consumer.maxUptakeKW ?? Infinity));
+  const allocatedKW = Math.min(demandKW, maxUptakeKW, Math.max(0, Number(availableKW) || 0));
+  return { demandKW, allocatedKW, unservedKW: demandKW - allocatedKW };
+}
+
+export function calculateReturnNodeTemperature(inletTemp, thermalPowerKW, returnFlowM3h) {
+  const flow = Number(returnFlowM3h);
+  if (!(flow > 0)) return Number(inletTemp);
+  return Number(inletTemp) + Number(thermalPowerKW) / (KW_PER_M3H_K * flow);
+}
+
+export function calculateReturnHeatDispatch(returnNetwork) {
+  const network = returnNetwork ?? {};
+  const nodes = (network.nodes ?? []).map(node => ({ ...node, order: Number(node.order) }))
+    .sort((a, b) => a.order - b.order || String(a.id).localeCompare(String(b.id)));
+  const sources = nodes.filter(node => node.type === "WASTE_HEAT_SOURCE").map(source => ({
+    ...source, availableKW: source.enabled === false ? 0 : Math.max(0, Number(source.availableKW ?? Number(source.maxPowerMW ?? 0) * 1000) || 0),
+    maxInjectionKW: Math.max(0, Number(source.maxInjectionKW ?? Infinity)),
+    remainingKW: source.enabled === false ? 0 : Math.min(Math.max(0, Number(source.availableKW ?? Number(source.maxPowerMW ?? 0) * 1000) || 0), Math.max(0, Number(source.maxInjectionKW ?? Infinity))),
+    dispatchedKW: 0
+  }));
+  const consumers = nodes.filter(node => node.type === "THREE_PIPE_CONSUMER").map(consumer => ({
+    ...consumer, demandKW: consumer.enabled === false ? 0 : Math.max(0, Number(consumer.demandKW) || 0), allocatedKW: 0,
+    unservedKW: consumer.enabled === false ? 0 : Math.max(0, Number(consumer.demandKW) || 0), allocations: []
+  }));
+
+  for (const consumer of consumers) {
+    if (consumer.enabled === false) continue;
+    const eligible = sources.filter(source => isReturnSourceAvailableToConsumer(source, consumer)
+      && Number(source.sourceTempC) >= Number(consumer.minimumUsableTempC))
+      .sort((a, b) => b.order - a.order || String(a.id).localeCompare(String(b.id)));
+    let capacity = calculateThreePipeExtraction(consumer, eligible.reduce((sum, source) => sum + source.remainingKW, 0)).allocatedKW;
+    for (const source of eligible) {
+      const allocatedKW = Math.min(capacity, source.remainingKW);
+      if (allocatedKW > 0) {
+        source.remainingKW -= allocatedKW;
+        source.dispatchedKW += allocatedKW;
+        consumer.allocatedKW += allocatedKW;
+        consumer.allocations.push({ sourceId: source.id, allocatedKW });
+        capacity -= allocatedKW;
+      }
+      if (capacity <= 0) break;
+    }
+    consumer.unservedKW = consumer.demandKW - consumer.allocatedKW;
+    const upstream = sources.filter(source => isReturnSourceAvailableToConsumer(source, consumer));
+    const tempEligible = upstream.filter(source => Number(source.sourceTempC) >= Number(consumer.minimumUsableTempC));
+    consumer.status = consumer.allocatedKW >= consumer.demandKW && consumer.demandKW > 0 ? "FULLY SUPPLIED"
+      : consumer.allocatedKW > 0 ? "PARTIALLY SUPPLIED"
+      : upstream.length === 0 ? "NO UPSTREAM SOURCE"
+      : tempEligible.length === 0 ? "TEMPERATURE TOO LOW" : "NO RETURN HEAT AVAILABLE";
+  }
+
+  return { nodes, sources, consumers };
+}
+
+export function calculateReturnNetworkState(returnNetwork) {
+  const network = returnNetwork ?? { baseReturnTempC: 45, returnFlowM3h: 500, nodes: [] };
+  const { nodes, sources, consumers } = calculateReturnHeatDispatch(network);
+  const sourceById = new Map(sources.map(source => [source.id, source]));
+  const consumerById = new Map(consumers.map(consumer => [consumer.id, consumer]));
+  const flow = Math.max(0, Number(network.returnFlowM3h) || 0);
+  let temperature = Number(network.baseReturnTempC ?? 45);
+  const temperatureNodes = nodes.map(node => {
+    const inletTempC = temperature;
+    let thermalPowerKW = 0;
+    if (node.type === "WASTE_HEAT_SOURCE") thermalPowerKW = sourceById.get(node.id)?.dispatchedKW ?? 0;
+    if (node.type === "THREE_PIPE_CONSUMER") thermalPowerKW = -(consumerById.get(node.id)?.allocatedKW ?? 0);
+    temperature = calculateReturnNodeTemperature(temperature, thermalPowerKW, node.returnFlowM3h ?? flow);
+    return { ...node, inletTempC, outletTempC: temperature, thermalPowerKW,
+      ...(sourceById.has(node.id) ? sourceById.get(node.id) : {}),
+      ...(consumerById.has(node.id) ? consumerById.get(node.id) : {}) };
+  });
+  const totalDemandKW = consumers.reduce((sum, consumer) => sum + consumer.demandKW, 0);
+  const allocatedKW = consumers.reduce((sum, consumer) => sum + consumer.allocatedKW, 0);
+  const totalAvailableKW = sources.reduce((sum, source) => sum + source.availableKW, 0);
+  const dispatchedKW = sources.reduce((sum, source) => sum + source.dispatchedKW, 0);
+  const eligibleAvailableKW = consumers.length ? sources.reduce((sum, source) => sum + (consumers.some(consumer =>
+    isReturnSourceAvailableToConsumer(source, consumer) && Number(source.sourceTempC) >= Number(consumer.minimumUsableTempC)) ? source.availableKW : 0), 0) : 0;
+  return { nodes: temperatureNodes, sources, consumers, totalDemandKW, eligibleAvailableKW, allocatedKW,
+    unservedKW: totalDemandKW - allocatedKW, unusedSourceKW: totalAvailableKW - dispatchedKW,
+    returnTempBeforeRecoveryC: temperatureNodes.find(node => node.type === "THREE_PIPE_CONSUMER")?.inletTempC ?? Number(network.baseReturnTempC ?? 45), returnTempAtPlantC: temperature,
+    coolingBenefitK: allocatedKW / (KW_PER_M3H_K * flow || Infinity),
+    returnFlowM3h: flow, dispatchRule: "Consumers in return-flow order; nearest upstream eligible source first." };
+}
+
 export function calculateBranchReturnDiagnostic(branch, branchSupplyTemp) {
   if (branch.returnTemp == null || branch.returnTemp === "" || !Number.isFinite(Number(branchSupplyTemp))) return null;
   const impliedHeatKW = Number(branch.flowM3h) * KW_PER_M3H_K * (Number(branchSupplyTemp) - Number(branch.returnTemp));
@@ -358,7 +476,7 @@ export function calculateNetworkState(input, hmpTargetTemp = input.hmpTargetTemp
     without = blendWithout.dispatch ? simulate(stateInput, [], blendWithout.dispatch) : { ...without, sourceBlending: blendWithout.diagnostics };
     withBooster = blendWith.dispatch ? simulate(stateInput, stateInput.gridBoosters, blendWith.dispatch) : { ...withBooster, sourceBlending: blendWith.diagnostics };
   }
-  return { without, withBooster, comparison: {
+  return { without, withBooster, returnNetwork: calculateReturnNetworkState(stateInput.returnNetwork), comparison: {
     criticalBefore: without.criticalCount,
     criticalAfter: withBooster.criticalAfterCount,
     marginBefore: Object.fromEntries(without.branches.map(branch => [branch.id, branch.margin])),
