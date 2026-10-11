@@ -4,31 +4,6 @@ export const KW_PER_M3H_K = WATER_DENSITY * WATER_CP / 3600;
 export const CLOSE_MARGIN_K = 2;
 export const BRANCH_IDS = ["A", "B", "C", "D", "E", "F"];
 
-// One raw data-center source can be allocated between HMP upgrading and direct return injection.
-export function splitDataCenterSource({ availableMW, supplyMW = 0, returnMW = 0, availabilityPercent = 100 }) {
-  const available = Number(availableMW);
-  const supply = Number(supplyMW);
-  const returned = Number(returnMW);
-  const availability = Number(availabilityPercent);
-  if (![available, supply, returned, availability].every(Number.isFinite)
-    || available < 0 || supply < 0 || returned < 0 || availability < 0 || availability > 100) {
-    throw new Error("Data-center source power and allocations must be non-negative, with availability from 0 to 100%.");
-  }
-  if (supply + returned > available + 1e-9) {
-    throw new Error("Data-center supply and return allocations cannot exceed available raw source heat.");
-  }
-  const allocatedMW = supply + returned;
-  return {
-    sourceId: "DATA-CENTER",
-    availableMW: available,
-    supplyMW: supply,
-    returnMW: returned,
-    unusedMW: Math.max(0, available - allocatedMW),
-    availabilityPercent: availability,
-    routing: supply > 0 && returned > 0 ? "BOTH" : supply > 0 ? "SUPPLY ONLY" : returned > 0 ? "RETURN ONLY" : "OFF"
-  };
-}
-
 export function isReturnSourceAvailableToConsumer(source, consumer) {
   return Boolean(source?.enabled !== false && consumer?.enabled !== false
     && source?.type === "WASTE_HEAT_SOURCE" && consumer?.type === "THREE_PIPE_CONSUMER"
@@ -40,6 +15,12 @@ export function calculateThreePipeExtraction(consumer, availableKW) {
   const maxUptakeKW = Math.max(0, Number(consumer.maxUptakeKW ?? Infinity));
   const allocatedKW = Math.min(demandKW, maxUptakeKW, Math.max(0, Number(availableKW) || 0));
   return { demandKW, allocatedKW, unservedKW: demandKW - allocatedKW };
+}
+
+export function calculatePip3HeatSplit(demandKW, returnHeatKW) {
+  const totalDemandKW = Math.max(0, Number(demandKW) || 0);
+  const returnContributionKW = Math.min(totalDemandKW, Math.max(0, Number(returnHeatKW) || 0));
+  return { demandKW: totalDemandKW, returnHeatKW: returnContributionKW, supplyTopUpKW: totalDemandKW - returnContributionKW };
 }
 
 export function calculateReturnNodeTemperature(inletTemp, thermalPowerKW, returnFlowM3h) {
@@ -188,11 +169,17 @@ export function calculateBranch(branch, hmpTemperatureCapabilityTemp, gridBooste
   };
 }
 
+export function findPrimaryTemperatureBottleneck(branches = []) {
+  return branches
+    .filter(branch => Number.isFinite(Number(branch.finalMargin)) && Number(branch.finalMargin) < 0)
+    .sort((a, b) => Number(a.finalMargin) - Number(b.finalMargin) || String(a.id).localeCompare(String(b.id)))[0] ?? null;
+}
+
 export function calculateWasteHeat(source, hmpTargetTemp, lossToHMP = 0) {
   const availableKW = Number(source.maxPowerMW) * 1000 * Number(source.availabilityPercent) / 100;
   const outletTemp = Number(source.injectionTemp);
   const contributionTemp = outletTemp - Number(lossToHMP);
-  const directInjectionEligible = contributionTemp > Number(hmpTargetTemp);
+  const directInjectionEligible = false;
   return { injectionTemp: outletTemp, contributionTemp, lossToHMP: Number(lossToHMP), availableKW,
     directInjectionEligible, usableKW: directInjectionEligible ? availableKW : 0 };
 }
@@ -215,32 +202,45 @@ function heatPumpStep(sourceHeatKW, inletTemp, outletTargetTemp, cop) {
 }
 
 export function calculateDataCenterModes(source, hmpTargetTemp, totalDemandKW = Infinity, lossToHMP = 0) {
+  const selectedMode = source.mode ?? null;
   const sourceHeatKW = Number(source.maxPowerMW) * 1000 * Number(source.availabilityPercent) / 100;
-  const direct = { mode: "direct", sourceHeatKW, electricalPowerKW: 0, deliveredHeatKW: sourceHeatKW,
-    outletTemp: Number(source.injectionTemp), totalCOP: null, stages: [] };
-  const oneStage = heatPumpStep(sourceHeatKW, source.injectionTemp, source.singleStageOutletTemp, source.singleStageCOP);
+  const rawTemp = Number(source.injectionTemp);
+  const rawReturn = { mode: "raw-return", sourceHeatKW, electricalPowerKW: 0, deliveredHeatKW: 0,
+    outletTemp: rawTemp, totalCOP: null, stages: [] };
+  const oneStageAvailable = rawTemp <= 70;
+  const oneStageTarget = oneStageAvailable ? Math.min(75, Math.max(rawTemp + 5, Number(source.singleStageOutletTemp))) : null;
+  const oneStage = oneStageAvailable
+    ? heatPumpStep(sourceHeatKW, rawTemp, oneStageTarget, source.singleStageCOP)
+    : { outletTemp: null, electricalPowerKW: 0, deliveredHeatKW: 0, noUpgradeRequired: false, stages: [] };
   const one = { mode: "one-stage", sourceHeatKW, electricalPowerKW: oneStage.electricalPowerKW,
     deliveredHeatKW: oneStage.deliveredHeatKW, outletTemp: oneStage.outletTemp,
     totalCOP: oneStage.electricalPowerKW > 0 ? oneStage.deliveredHeatKW / oneStage.electricalPowerKW : null,
-    noUpgradeRequired: oneStage.noUpgradeRequired, stages: [oneStage] };
-  const stage1 = heatPumpStep(sourceHeatKW, source.injectionTemp, source.stage1OutletTemp, source.stage1COP);
-  const stage2 = heatPumpStep(stage1.deliveredHeatKW, stage1.outletTemp, source.stage2OutletTemp, source.stage2COP);
+    noUpgradeRequired: oneStage.noUpgradeRequired, temperatureRangeAvailable: oneStageAvailable,
+    requestedOutletTemp: Number(source.singleStageOutletTemp), stages: oneStageAvailable ? [oneStage] : [] };
+  const twoStageAvailable = rawTemp <= 85;
+  const stage1Target = Math.min(75, Number(source.stage1OutletTemp));
+  const stage1 = heatPumpStep(sourceHeatKW, rawTemp, stage1Target, source.stage1COP);
+  const stage2 = twoStageAvailable
+    ? heatPumpStep(stage1.deliveredHeatKW, stage1.outletTemp, Math.min(85, Math.max(75, Number(source.stage2OutletTemp))), source.stage2COP)
+    : { outletTemp: null, electricalPowerKW: 0, deliveredHeatKW: 0, noUpgradeRequired: false };
   const twoStageElectricKW = stage1.electricalPowerKW + stage2.electricalPowerKW;
   const two = { mode: "two-stage", sourceHeatKW, electricalPowerKW: twoStageElectricKW,
     deliveredHeatKW: stage2.deliveredHeatKW, outletTemp: stage2.outletTemp,
     totalCOP: twoStageElectricKW > 0 ? stage2.deliveredHeatKW / twoStageElectricKW : null,
-    noUpgradeRequired: twoStageElectricKW === 0, stages: [stage1, stage2] };
-  const results = { direct, "one-stage": one, "two-stage": two };
+    noUpgradeRequired: twoStageElectricKW === 0, temperatureRangeAvailable: twoStageAvailable,
+    requestedOutletTemp: Number(source.stage2OutletTemp), stages: twoStageAvailable ? [stage1, stage2] : [] };
+  const results = { "raw-return": rawReturn, "one-stage": one, "two-stage": two };
   for (const result of Object.values(results)) {
-    result.availableKW = sourceHeatKW;
+    result.availableKW = result.mode === "raw-return" ? 0 : sourceHeatKW;
     result.lossToHMP = Number(lossToHMP);
-    result.contributionTemp = result.outletTemp - Number(lossToHMP);
-    result.injectionEligible = result.contributionTemp > Number(hmpTargetTemp);
+    result.contributionTemp = result.outletTemp == null ? null : result.outletTemp - Number(lossToHMP);
+    result.active = result.mode === selectedMode;
+    result.injectionEligible = result.mode !== "raw-return" && result.contributionTemp != null && result.contributionTemp > Number(hmpTargetTemp);
     result.strictTemperatureEligible = result.injectionEligible;
     result.usedViaBlending = false;
     result.usableKW = result.injectionEligible ? result.deliveredHeatKW : 0;
-    result.injectedKW = Math.min(Number(totalDemandKW), result.usableKW);
-    result.usedInSelectedDispatch = result.injectionEligible && result.injectedKW > 0;
+    result.injectedKW = result.active ? Math.min(Number(totalDemandKW), result.usableKW) : 0;
+    result.usedInSelectedDispatch = result.active && result.injectionEligible && result.injectedKW > 0;
   }
   return results;
 }
@@ -283,29 +283,41 @@ function validateNetwork(input) {
       || Number(input.wasteHeat.maxPowerMW) * Number(input.wasteHeat.availabilityPercent) > 0 && returnTemp >= selectedDC.contributionTemp)
       errors.push("Blended source mixing requires the common network return temperature to be below each contributing source temperature.");
   }
-  if (!["direct", "one-stage", "two-stage"].includes(input.wasteHeat.mode)) errors.push("Select direct, one-stage or two-stage data-center operation.");
+  if (!["raw-return", "one-stage", "two-stage"].includes(input.wasteHeat.mode)) errors.push("Select raw return, one-stage supply or two-stage supply data-center operation.");
+  const rawSourceTemp = Number(input.wasteHeat.injectionTemp);
+  if (input.wasteHeat.mode === "one-stage") {
+    if (rawSourceTemp + 5 > 75) errors.push("One-stage HP is unavailable: RAW + 5 K exceeds the 75°C outlet maximum.");
+    else if (Number(input.wasteHeat.singleStageOutletTemp) < rawSourceTemp + 5 || Number(input.wasteHeat.singleStageOutletTemp) > 75)
+      errors.push(`One-stage outlet must be between RAW + 5 K (${rawSourceTemp + 5}°C) and 75°C.`);
+  }
+  if (input.wasteHeat.mode === "two-stage") {
+    if (rawSourceTemp > 85) errors.push("Two-stage HP is unavailable when the raw source exceeds its 85°C outlet maximum.");
+    if (Number(input.wasteHeat.stage1OutletTemp) > 75) errors.push("Two-stage Stage 1 outlet must not exceed 75°C.");
+    if (Number(input.wasteHeat.stage2OutletTemp) < 75 || Number(input.wasteHeat.stage2OutletTemp) > 85)
+      errors.push("Two-stage final outlet must be between 75°C and 85°C.");
+  }
   for (const key of ["singleStageCOP", "stage1COP", "stage2COP"])
     if (Number(input.wasteHeat[key]) <= 1) errors.push(`Data-center ${key} must be greater than 1.`);
-  if (Number(input.booster.cop) <= 1) errors.push("GridBooster COP must be greater than 1.");
-  if (Number(input.booster.maxThermalKW) < 0) errors.push("GridBooster thermal capacity cannot be negative.");
-  if (!BRANCH_IDS.includes(input.booster.branchId) && input.booster.branchId !== "none") errors.push("Select branch A–F or none for quick GridBooster placement.");
-  if (!Array.isArray(input.gridBoosters)) errors.push("GridBoosters must be a list.");
+  if (Number(input.booster.cop) <= 1) errors.push("Gridbooster COP must be greater than 1.");
+  if (Number(input.booster.maxThermalKW) < 0) errors.push("Gridbooster thermal capacity cannot be negative.");
+  if (!BRANCH_IDS.includes(input.booster.branchId) && input.booster.branchId !== "none") errors.push("Select branch A–F or none for quick Gridbooster placement.");
+  if (!Array.isArray(input.gridBoosters)) errors.push("Gridboosters must be a list.");
   const boosterIds = new Set();
   for (const item of input.gridBoosters ?? []) {
-    if (boosterIds.has(String(item.id))) errors.push(`GridBooster id ${item.id} is duplicated.`);
+    if (boosterIds.has(String(item.id))) errors.push(`Gridbooster id ${item.id} is duplicated.`);
     boosterIds.add(String(item.id));
-    if (item.branchId && !BRANCH_IDS.includes(item.branchId)) errors.push(`GridBooster ${item.id} has an invalid branch.`);
-    if (!["target", "lift"].includes(item.mode)) errors.push(`GridBooster ${item.id} mode must be target or lift.`);
+    if (item.branchId && !BRANCH_IDS.includes(item.branchId)) errors.push(`Gridbooster ${item.id} has an invalid branch.`);
+    if (!["target", "lift"].includes(item.mode)) errors.push(`Gridbooster ${item.id} mode must be target or lift.`);
     for (const key of ["cop", "maxThermalKW", item.mode === "target" ? "targetTemp" : "liftK"])
-      if (item[key] === "" || !Number.isFinite(Number(item[key]))) errors.push(`GridBooster ${item.id} ${key} must be a number.`);
-    if (Number(item.cop) <= 1) errors.push(`GridBooster ${item.id} COP must be greater than 1.`);
-    if (Number(item.maxThermalKW) < 0) errors.push(`GridBooster ${item.id} capacity cannot be negative.`);
-    if (item.mode === "lift" && Number(item.liftK) < 0) errors.push(`GridBooster ${item.id} lift cannot be negative.`);
+      if (item[key] === "" || !Number.isFinite(Number(item[key]))) errors.push(`Gridbooster ${item.id} ${key} must be a number.`);
+    if (Number(item.cop) <= 1) errors.push(`Gridbooster ${item.id} COP must be greater than 1.`);
+    if (Number(item.maxThermalKW) < 0) errors.push(`Gridbooster ${item.id} capacity cannot be negative.`);
+    if (item.mode === "lift" && Number(item.liftK) < 0) errors.push(`Gridbooster ${item.id} lift cannot be negative.`);
   }
   const templateValue = input.booster.mode === "target" ? input.booster.targetTemp : input.booster.liftK;
-  if (!["target", "lift"].includes(input.booster.mode)) errors.push("GridBooster template mode must be target or lift.");
-  if (templateValue === "" || !Number.isFinite(Number(templateValue))) errors.push("GridBooster template target or lift must be a number.");
-  if (input.booster.mode === "lift" && Number(input.booster.liftK) < 0) errors.push("GridBooster template lift cannot be negative.");
+  if (!["target", "lift"].includes(input.booster.mode)) errors.push("Gridbooster template mode must be target or lift.");
+  if (templateValue === "" || !Number.isFinite(Number(templateValue))) errors.push("Gridbooster template target or lift must be a number.");
+  if (input.booster.mode === "lift" && Number(input.booster.liftK) < 0) errors.push("Gridbooster template lift cannot be negative.");
   return errors;
 }
 
@@ -462,8 +474,23 @@ export function calculateBlendedSourceState(input, strictState, installedBooster
     mixedSupplyTemp: best.mix.mixedSupplyTemp, diagnostics } : null, diagnostics };
 }
 
+function routeDataCenterReturnSource(returnNetwork, wasteHeat) {
+  if (!returnNetwork) return returnNetwork;
+  const rawReturnSelected = wasteHeat.mode === "raw-return";
+  const availableKW = Number(wasteHeat.maxPowerMW) * 1000 * Number(wasteHeat.availabilityPercent) / 100;
+  let dataCenterNodeSeen = false;
+  return { ...returnNetwork, nodes: (returnNetwork.nodes ?? []).flatMap(node => {
+    if (node.id !== "DC-RETURN" && node.sourceGroupId !== "DATA-CENTER") return [node];
+    if (dataCenterNodeSeen) return [];
+    dataCenterNodeSeen = true;
+    return [{ ...node, id: "DC-RETURN", sourceGroupId: "DATA-CENTER", enabled: rawReturnSelected,
+      sourceTempC: Number(wasteHeat.injectionTemp), availableKW: rawReturnSelected ? availableKW : 0 }];
+  }) };
+}
+
 export function calculateNetworkState(input, hmpTargetTemp = input.hmpTargetTemp, prices = {}) {
-  const stateInput = { ...input, hmpTargetTemp: Number(hmpTargetTemp) };
+  const stateInput = { ...input, hmpTargetTemp: Number(hmpTargetTemp),
+    returnNetwork: routeDataCenterReturnSource(input.returnNetwork, input.wasteHeat) };
   const errors = validateNetwork(stateInput);
   if (errors.length) throw new Error(errors.join(" "));
   const baselineInput = stateInput.sourceTemperatureStrategy === "blended"
