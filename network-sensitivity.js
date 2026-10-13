@@ -1,4 +1,4 @@
-import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261011-2";
+import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261013-2";
 import { analyzeSystemOpportunity } from "./network-insights.js?v=20261011-2";
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -11,6 +11,10 @@ const fields = {
   sourceTemperature: { key: "sensitivity.variable.source_temperature", unit: "°C", path: ["input", "wasteHeat", "injectionTemp"], defaults: value => [Math.max(0, value - 10), Math.min(85, value + 10), 2], perturbation: 5 },
   wasteHeatAvailability: { key: "sensitivity.variable.waste_heat_availability", unit: "%", path: ["input", "wasteHeat", "availabilityPercent"], defaults: () => [25, 100, 5], perturbation: 20, clamp: [0, 100] },
   sourceCapacity: { key: "sensitivity.variable.source_capacity", unit: "MWth", path: ["input", "wasteHeat", "maxPowerMW"], defaults: value => [0, Math.max(1, value * 1.5), Math.max(0.1, value / 10)], perturbation: value => Math.max(0.1, value * 0.2), clampMin: 0 },
+  industrialSourceTemperature: { key: "sensitivity.variable.industrial_source_temperature", unit: "°C", path: ["input", "industrialWasteHeat", "sourceTempC"], defaults: value => [value - 10, value + 10, 2], perturbation: 5 },
+  industrialAvailability: { key: "sensitivity.variable.industrial_availability", unit: "%", path: ["input", "industrialWasteHeat", "availabilityPercent"], defaults: () => [0, 100, 10], perturbation: 20, clamp: [0, 100] },
+  industrialCapacity: { key: "sensitivity.variable.industrial_capacity", unit: "kWth", path: ["input", "industrialWasteHeat", "availableThermalKW"], defaults: value => [0, Math.max(100, value * 1.5), Math.max(50, value / 10)], perturbation: value => Math.max(100, value * 0.2), clampMin: 0 },
+  industrialPathLoss: { key: "sensitivity.variable.industrial_path_loss", unit: "K", path: ["input", "industrialWasteHeat", "lossToHMP"], defaults: value => [Math.max(0, value - 5), value + 5, 1], perturbation: 2, clampMin: 0 },
   boosterCOP: { key: "sensitivity.variable.booster_cop", unit: "COP", path: ["input", "booster", "cop"], defaults: () => [2, 5, 0.25], perturbation: 0.5, clampMin: 1.01 },
   dcOneStageCOP: { key: "sensitivity.variable.dc_one_stage_cop", unit: "COP", path: ["input", "wasteHeat", "singleStageCOP"], defaults: value => [Math.max(1.1, value - 1), value + 1, 0.25], perturbation: 0.5, clampMin: 1.01 },
   dcStage1COP: { key: "sensitivity.variable.dc_stage1_cop", unit: "COP", path: ["input", "wasteHeat", "stage1COP"], defaults: value => [Math.max(1.1, value - 1), value + 1, 0.25], perturbation: 0.5, clampMin: 1.01 },
@@ -94,12 +98,12 @@ function pointMetrics(state, input, prices) {
   const constrained = branches.filter(branch => branch.finalMargin != null && branch.finalMargin < -1e-9).map(branch => branch.id).sort();
   return {
     status: summary.operatingPointStatus, supported: summary.networkOperatingPointSupported, primary,
-    metrics: { operatingCost: safe(summary.operatingCostPerHour), usableHeat: safe(summary.usableDataCenterHeatKW),
+    metrics: { operatingCost: safe(summary.operatingCostPerHour), usableHeat: safe(summary.usableWasteHeatKW),
       centralProduction: safe(summary.centralPlantActualKW), totalElectricity: safe(summary.totalSystemElectricKW),
       boosterElectricity: safe(summary.installedBoosterElectricKW), boosterDuty: safe(summary.installedBoosterThermalKW),
       constrainedBranches: constrained.length, branchesRequiringBooster: summary.branchesRequiringBooster,
       returnHeat: safe(returnHeat), supplyTopUp: safe(topUp), returnTempAtPlant: safe(ret.returnTempAtPlantC) },
-    flags: { sourceEligible: Boolean(summary.selectedDataCenterPathEligible), activeBoosters: summary.activeBoosterCount,
+    flags: { sourceEligible: Boolean(summary.selectedDataCenterPathEligible), industrialSourceEligible: Boolean(summary.industrialWasteHeatTemperatureEligible), activeBoosters: summary.activeBoosterCount,
       boosterCapacitySufficient: state.withBooster.booster.capacitySufficient, supported: summary.networkOperatingPointSupported,
       constrainedBranches: constrained, returnConsumers: ret.consumers.map(consumer => ({ id: consumer.id,
         eligible: !["NO UPSTREAM SOURCE", "TEMPERATURE TOO LOW"].includes(consumer.status) })) },
@@ -129,6 +133,7 @@ export function detectSensitivityThresholds(points) {
     if (!before.flags || !after.flags) continue;
     const add = (type, detail = null) => events.push({ type, value: after.value, from: before.value, detail });
     if (before.flags.sourceEligible !== after.flags.sourceEligible) add("source-eligibility", after.flags.sourceEligible);
+    if (before.flags.industrialSourceEligible !== after.flags.industrialSourceEligible) add("industrial-source-eligibility", after.flags.industrialSourceEligible);
     for (const id of new Set([...before.flags.constrainedBranches, ...after.flags.constrainedBranches]))
       if (before.flags.constrainedBranches.includes(id) !== after.flags.constrainedBranches.includes(id)) add("branch-constraint", { branchId: id, constrained: after.flags.constrainedBranches.includes(id) });
     if (before.flags.activeBoosters !== after.flags.activeBoosters) add("booster-activation", after.flags.activeBoosters);
@@ -165,7 +170,7 @@ export function summarizeSensitivitySweep(result) {
 
 export function calculateKeySensitivities(input, prices, specFactory, baselineResult) {
   const baseline = baselineResult ?? pointMetrics(simulateNetwork(clone(input), clone(prices ?? {})), input, prices);
-  return ["electricityPrice", "wasteHeatAvailability", "sourceTemperature", "boosterCOP", "centralHeatCost"].flatMap(variable => {
+  return ["electricityPrice", "wasteHeatAvailability", "sourceTemperature", "industrialSourceTemperature", "industrialAvailability", "boosterCOP", "centralHeatCost"].flatMap(variable => {
     try {
       const field = fields[variable], spec = specFactory(variable, input, prices);
       const amount = field.perturbation === "percent" ? Math.abs(spec.currentValue) * 0.2 : typeof field.perturbation === "function" ? field.perturbation(spec.currentValue) : field.perturbation;

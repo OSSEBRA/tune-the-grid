@@ -5,7 +5,7 @@ import {
   isReturnSourceAvailableToConsumer,
   lowestSupportedPoint,
   summarizeNetworkFlexState
-} from "./network-model.js?v=20261011-2";
+} from "./network-model.js?v=20261013-2";
 
 const clone = value => globalThis.structuredClone
   ? structuredClone(value)
@@ -60,7 +60,15 @@ export function analyzeSystemOpportunity(input, result) {
     const capability = number(selectedSource.contributionTemp);
     constraints.push({ type: "source-temperature", capabilityTempC: capability, targetTempC: number(operating.hmpTargetTemp),
       shortfallK: capability == null ? null : Math.max(0, Number(operating.hmpTargetTemp) - capability), sourceMode: selectedSource.mode });
-  } else if (operating.hmpTemperatureCapabilityTemp != null && !operating.hmpTemperatureReachable
+  }
+  const industrial = operating.industrialWasteHeat;
+  if (Number(industrial?.availableKW) > 0 && !industrial.temperatureEligible) {
+    const capability = number(industrial.contributionTemp);
+    constraints.push({ type: "source-temperature", sourceId: "industrial-waste-heat", sourceName: "Industrial Waste Heat",
+      capabilityTempC: capability, targetTempC: number(operating.hmpTargetTemp),
+      shortfallK: capability == null ? null : Math.max(0, Number(operating.hmpTargetTemp) - capability) });
+  }
+  if (!constraints.some(constraint => constraint.type === "source-temperature") && operating.hmpTemperatureCapabilityTemp != null && !operating.hmpTemperatureReachable
     && Number(operating.hmpTemperatureCapabilityTemp) < Number(operating.hmpTargetTemp)) {
     constraints.push({ type: "source-temperature", capabilityTempC: number(operating.hmpTemperatureCapabilityTemp), targetTempC: number(operating.hmpTargetTemp),
       shortfallK: Number(operating.hmpTargetTemp) - Number(operating.hmpTemperatureCapabilityTemp), sourceMode: selectedSource?.mode });
@@ -90,7 +98,7 @@ export function calculateOpportunityIntervention(input, result, prices = {}) {
   const proposedMetrics = summarizeNetworkFlexState(proposedState, proposedInput, prices);
   return {
     primary, resolved, requiredDutyKW: primary.requiredDutyKW,
-    additionalUsableHeatKW: proposedMetrics.usableDataCenterHeatKW - baseMetrics.usableDataCenterHeatKW,
+    additionalUsableHeatKW: proposedMetrics.usableWasteHeatKW - baseMetrics.usableWasteHeatKW,
     centralProductionReductionKW: baseMetrics.centralPlantActualKW - proposedMetrics.centralPlantActualKW,
     additionalElectricityKW: proposedMetrics.totalSystemElectricKW - baseMetrics.totalSystemElectricKW,
     operatingBenefitPerHour: baseMetrics.operatingCostPerHour - proposedMetrics.operatingCostPerHour
@@ -106,8 +114,8 @@ export function calculateSourceTemperatureIntervention(input, result, prices = {
   const state = calculateNetworkState(candidateInput, target, prices);
   const before = summarizeNetworkFlexState(result, input, prices);
   const after = summarizeNetworkFlexState(state, candidateInput, prices);
-  return { hmpTargetTemp: target, state, metrics: after,
-    additionalUsableHeatKW: after.usableDataCenterHeatKW - before.usableDataCenterHeatKW,
+  return { hmpTargetTemp: target, state, metrics: after, sourceId: primary.sourceId ?? "data-center",
+    additionalUsableHeatKW: after.usableWasteHeatKW - before.usableWasteHeatKW,
     centralProductionReductionKW: before.centralPlantActualKW - after.centralPlantActualKW,
     additionalElectricityKW: after.totalSystemElectricKW - before.totalSystemElectricKW,
     operatingBenefitPerHour: before.operatingCostPerHour - after.operatingCostPerHour };
@@ -126,6 +134,11 @@ const assumptionFields = [
   ["input.wasteHeat.availabilityPercent", "wasteHeatAvailability"],
   ["input.wasteHeat.injectionTemp", "dataCenterSourceConditions"],
   ["input.wasteHeat.lossToHMP", "sourcePathLosses"],
+  ["input.industrialWasteHeat.availableThermalKW", "industrialWasteHeatAvailability"],
+  ["input.industrialWasteHeat.availabilityPercent", "industrialWasteHeatAvailability"],
+  ["input.industrialWasteHeat.sourceTempC", "industrialWasteHeatConditions"],
+  ["input.industrialWasteHeat.lossToHMP", "sourcePathLosses"],
+  ["prices.industrialWasteHeatCostPerMWh", "industrialWasteHeatPrice"],
   ["input.normalPlantSupplyTemp", "plantRampConditions"],
   ["input.maxRampedPlantSupplyTemp", "plantRampConditions"],
   ["input.plantRampCostPerMWhPerK", "plantRampConditions"],
@@ -189,7 +202,9 @@ export function summarizeScenarioResult(snapshot) {
     dataCenterMode: operating.wasteHeat?.mode ?? input.wasteHeat?.mode,
     rawReturnHeatKW: operating.wasteHeat?.mode === "raw-return" ? number(rawReturnSource?.dispatchedKW) ?? 0 : 0,
     upgradedSupplyHeatKW: operating.wasteHeat?.mode !== "raw-return" ? number(operating.wasteHeatUsedKW) ?? 0 : 0,
-    usableWasteHeatKW: number(operating.wasteHeatUsedKW) ?? 0,
+    dataCenterSupplyHeatKW: number(operating.wasteHeatUsedKW) ?? 0,
+    industrialSupplyHeatKW: number(operating.industrialWasteHeatUsedKW) ?? 0,
+    usableWasteHeatKW: number(operating.totalWasteHeatUsedKW) ?? 0,
     returnHeatKW,
     supplyTopUpKW: Math.max(0, demandKW - returnHeatKW),
     returnTempAtPlantC: number(state.returnNetwork?.returnTempAtPlantC),
@@ -228,8 +243,8 @@ function branchMargins(point) {
 
 function thresholdEvents(higher, lower) {
   const events = [];
-  const highHeat = Number(higher?.usableDataCenterHeatKW ?? 0);
-  const lowHeat = Number(lower?.usableDataCenterHeatKW ?? 0);
+  const highHeat = Number(higher?.usableWasteHeatKW ?? higher?.usableDataCenterHeatKW ?? 0);
+  const lowHeat = Number(lower?.usableWasteHeatKW ?? lower?.usableDataCenterHeatKW ?? 0);
   if (lowHeat > highHeat + 1e-7) events.push({ type: "waste-heat", deltaKW: lowHeat - highHeat });
   const highMargins = branchMargins(higher), lowMargins = branchMargins(lower);
   for (const branch of lowMargins) {
@@ -253,7 +268,7 @@ export function analyzeMarginalTemperature(points, currentTarget, stepK = 1, min
     const perK = difference => deltaK > 0 && finite(difference) ? difference / deltaK : 0;
     local = {
       current, lower, deltaK,
-      additionalUsableHeatKWPerK: perK(Number(lower.usableDataCenterHeatKW ?? 0) - Number(current.usableDataCenterHeatKW ?? 0)),
+      additionalUsableHeatKWPerK: perK(Number(lower.usableWasteHeatKW ?? lower.usableDataCenterHeatKW ?? 0) - Number(current.usableWasteHeatKW ?? current.usableDataCenterHeatKW ?? 0)),
       centralProductionReductionKWPerK: perK(Number(current.centralPlantActualKW ?? 0) - Number(lower.centralPlantActualKW ?? 0)),
       additionalElectricityKWPerK: perK(Number(lower.totalSystemElectricKW ?? 0) - Number(current.totalSystemElectricKW ?? 0)),
       operatingBenefitPerHourPerK: perK(Number(current.operatingCostPerHour ?? 0) - Number(lower.operatingCostPerHour ?? 0)),
@@ -275,7 +290,7 @@ export function analyzeMarginalTemperature(points, currentTarget, stepK = 1, min
     thresholds,
     bestCost: bestCost ? {
       hmpTargetTemp: Number(bestCost.hmpTargetTemp), operatingCostPerHour: Number(bestCost.operatingCostPerHour),
-      usableWasteHeatKW: Number(bestCost.usableDataCenterHeatKW ?? 0), gridboosterElectricKW: Number(bestCost.installedBoosterElectricKW ?? 0),
+      usableWasteHeatKW: Number(bestCost.usableWasteHeatKW ?? bestCost.usableDataCenterHeatKW ?? 0), gridboosterElectricKW: Number(bestCost.installedBoosterElectricKW ?? 0),
       constrainedBranches: branchMargins(bestCost).filter(branch => Number(branch.finalMargin) < 0).length,
       boostedBranches: Number(bestCost.branchesRequiringBooster ?? 0)
     } : null
