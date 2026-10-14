@@ -1,5 +1,5 @@
-import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261013-2";
-import { analyzeSystemOpportunity, createScenarioSnapshot, restoreScenarioSnapshot } from "./network-insights.js?v=20261011-2";
+import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261014-1";
+import { analyzeSystemOpportunity, createScenarioSnapshot, restoreScenarioSnapshot } from "./network-insights.js?v=20261014-1";
 
 const clone = value => globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const finite = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -72,8 +72,15 @@ function calculateOperatingBin(bin) {
       supported: status === "SUPPORTED",
       usableSupplyHeatKW: point.usableWasteHeatKW,
       totalWasteHeatUsedKW: point.usableWasteHeatKW,
-      dataCenterSupplyHeatKW: point.dataCenterHeatUsedKW,
-      industrialSupplyHeatKW: point.industrialWasteHeatUsedKW,
+      dataCenterSupplyHeatKW: point.dataCenterHeatUsedKW + point.dataCenterFlexibleHeatUsedKW,
+      industrialSupplyHeatKW: point.industrialWasteHeatUsedKW + point.industrialFlexibleHeatUsedKW,
+      wastewaterSupplyHeatKW: point.wastewaterHeatUsedKW + point.wastewaterFlexibleHeatUsedKW,
+      greenhouseHeatUseKW: operating.flexibleSinks?.greenhouse.totalHeatKW ?? 0,
+      greenhouseReturnHeatKW: operating.flexibleSinks?.greenhouse.returnHeatKW ?? 0,
+      absorptionHeatInputKW: operating.flexibleSinks?.absorptionCooling.heatInputKW ?? 0,
+      coolingOutputKW: operating.flexibleSinks?.absorptionCooling.coolingOutputKW ?? 0,
+      curtailedHeatKW: operating.flexibleSinks?.curtailedHeatKW ?? 0,
+      surplusHeatKW: operating.flexibleSinks?.surplusHeatKW ?? 0,
       rawReturnHeatKW: pip3BySourceKW["DC-RETURN"] ?? 0,
       otherReturnHeatKW: returnHeatKW - (pip3BySourceKW["DC-RETURN"] ?? 0),
       availableUpgradedSupplyHeatKW: point.dataCenterDeliveredHeatKW,
@@ -85,10 +92,13 @@ function calculateOperatingBin(bin) {
       totalElectricKW: point.totalSystemElectricKW,
       supplyTopUpKW: returnNodes.filter(node => node.type === "THREE_PIPE_CONSUMER").reduce((sum, node) => sum + Number(node.unservedKW ?? 0), 0),
       returnHeatKW,
-      centralHeatCostPerHour: operating.centralPlantUsedKW * Number(prices.centralHeatCostPerMWh ?? 40) / 1000,
-      wasteHeatCostPerHour: operating.dataCenterSourceHeatUsedKW * Number(prices.wasteHeatCostPerMWh ?? 5) / 1000,
-      industrialWasteHeatCostPerHour: operating.industrialWasteHeatUsedKW * Number(prices.industrialWasteHeatCostPerMWh ?? 5) / 1000,
-      electricityCostPerHour: (point.totalSystemElectricKW * Number(prices.electricityPricePerMWh ?? 50)) / 1000,
+      centralHeatCostPerHour: operating.centralPlantUsedKW * Number(prices.centralHeatCostPerMWh ?? 76) / 1000,
+      wasteHeatCostPerHour: (operating.dataCenterSourceHeatUsedKW + Number(operating.returnHeatSourceCostKW ?? 0)
+        + (operating.wasteHeat.deliveredHeatKW > 0 ? operating.wasteHeat.sourceHeatKW * Number(operating.wasteHeat.flexibleDeliveredHeatKW ?? 0) / operating.wasteHeat.deliveredHeatKW : 0)) * Number(prices.wasteHeatCostPerMWh ?? 10) / 1000,
+      industrialWasteHeatCostPerHour: (operating.industrialWasteHeatUsedKW + Number(operating.industrialWasteHeat.flexibleUsedKW ?? 0)) * Number(prices.industrialWasteHeatCostPerMWh ?? 10) / 1000,
+      wastewaterHeatCostPerHour: (operating.wastewaterHeatUsedKW + Number(operating.wastewaterHeat.flexibleUsedKW ?? 0)) * Number(prices.wastewaterHeatCostPerMWh ?? 25) / 1000,
+      coolingRevenuePerHour: operating.flexibleSinks?.absorptionCooling.coolingRevenuePerHour ?? 0,
+      electricityCostPerHour: (point.totalSystemElectricKW * Number(prices.electricityPricePerMWh ?? 70)) / 1000,
       plantRampPenaltyPerHour: Number(operating.plantRampPenaltyPerHour ?? 0),
       operatingCostPerHour: point.operatingCostPerHour,
       primaryConstraint: constraintKey(opportunity.primary),
@@ -117,11 +127,13 @@ export function calculateAnnualProfile(profile) {
   const totalHours = bins.reduce((sum, bin) => sum + (finite(bin.hoursPerYear) && Number(bin.hoursPerYear) >= 0 ? Number(bin.hoursPerYear) : 0), 0);
   const totals = { supportedHours: 0, temperatureUnsupportedHours: 0, branchTemperatureConstraintHours: 0,
     capacityShortfallHours: 0, invalidHours: 0, pip3BySourceMWh: {},
-    usableSupplyHeatMWh: 0, totalWasteHeatUsedMWh: 0, dataCenterSupplyHeatMWh: 0, industrialSupplyHeatMWh: 0,
+    usableSupplyHeatMWh: 0, totalWasteHeatUsedMWh: 0, dataCenterSupplyHeatMWh: 0, industrialSupplyHeatMWh: 0, wastewaterSupplyHeatMWh: 0,
+    greenhouseHeatUseMWh: 0, greenhouseReturnHeatMWh: 0, absorptionHeatInputMWh: 0, coolingOutputMWh: 0, surplusHeatMWh: 0, curtailedHeatMWh: 0,
     availableUpgradedSupplyHeatMWh: 0, rawReturnHeatMWh: 0,
     upgradedSupplyHeatMWh: 0, otherReturnHeatMWh: 0, sourceHeatUsedMWh: 0,
     centralProductionMWh: 0, gridboosterThermalMWh: 0, gridboosterElectricMWh: 0, dataCenterElectricMWh: 0,
-    totalElectricMWh: 0, supplyTopUpMWh: 0, centralHeatCost: 0, wasteHeatCost: 0, industrialWasteHeatCost: 0, electricityCost: 0,
+    totalElectricMWh: 0, supplyTopUpMWh: 0, centralHeatCost: 0, wasteHeatCost: 0, industrialWasteHeatCost: 0, wastewaterHeatCost: 0,
+    electricityCost: 0, coolingRevenue: 0,
     plantRampPenalty: 0, operatingCost: 0 };
   const boosters = new Map(), modes = { "raw-return": 0, "one-stage": 0, "two-stage": 0 }, primaryConstraintHours = {}, constraintPresentHours = {};
   for (const result of results) {
@@ -149,6 +161,9 @@ export function calculateAnnualProfile(profile) {
     if (!m.supported) continue;
     for (const [target, kw] of [["usableSupplyHeatMWh", m.usableSupplyHeatKW], ["totalWasteHeatUsedMWh", m.totalWasteHeatUsedKW],
       ["dataCenterSupplyHeatMWh", m.dataCenterSupplyHeatKW], ["industrialSupplyHeatMWh", m.industrialSupplyHeatKW],
+      ["wastewaterSupplyHeatMWh", m.wastewaterSupplyHeatKW], ["greenhouseHeatUseMWh", m.greenhouseHeatUseKW],
+      ["greenhouseReturnHeatMWh", m.greenhouseReturnHeatKW], ["absorptionHeatInputMWh", m.absorptionHeatInputKW],
+      ["coolingOutputMWh", m.coolingOutputKW], ["surplusHeatMWh", m.surplusHeatKW], ["curtailedHeatMWh", m.curtailedHeatKW],
       ["availableUpgradedSupplyHeatMWh", m.availableUpgradedSupplyHeatKW], ["rawReturnHeatMWh", m.rawReturnHeatKW],
       ["upgradedSupplyHeatMWh", m.upgradedSupplyHeatKW], ["otherReturnHeatMWh", m.otherReturnHeatKW],
       ["sourceHeatUsedMWh", m.sourceHeatUsedKW],
@@ -158,7 +173,9 @@ export function calculateAnnualProfile(profile) {
     totals.centralHeatCost += m.centralHeatCostPerHour * h;
     totals.wasteHeatCost += m.wasteHeatCostPerHour * h;
     totals.industrialWasteHeatCost += m.industrialWasteHeatCostPerHour * h;
+    totals.wastewaterHeatCost += m.wastewaterHeatCostPerHour * h;
     totals.electricityCost += m.electricityCostPerHour * h;
+    totals.coolingRevenue += m.coolingRevenuePerHour * h;
     totals.plantRampPenalty += m.plantRampPenaltyPerHour * h;
     totals.operatingCost += m.operatingCostPerHour * h;
     for (const [sourceId, kw] of Object.entries(m.pip3BySourceKW)) {

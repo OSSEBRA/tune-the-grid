@@ -1,5 +1,5 @@
-import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261013-2";
-import { analyzeSystemOpportunity } from "./network-insights.js?v=20261011-2";
+import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261014-1";
+import { analyzeSystemOpportunity } from "./network-insights.js?v=20261014-1";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const round = value => Number(Number(value).toFixed(8));
@@ -10,17 +10,24 @@ const fields = {
   wasteHeatCost: { key: "sensitivity.variable.waste_heat_cost", unit: "€/MWh", path: ["prices", "wasteHeatCostPerMWh"], defaults: () => [0, 30, 5], perturbation: "percent", clampMin: 0 },
   sourceTemperature: { key: "sensitivity.variable.source_temperature", unit: "°C", path: ["input", "wasteHeat", "injectionTemp"], defaults: value => [Math.max(0, value - 10), Math.min(85, value + 10), 2], perturbation: 5 },
   wasteHeatAvailability: { key: "sensitivity.variable.waste_heat_availability", unit: "%", path: ["input", "wasteHeat", "availabilityPercent"], defaults: () => [25, 100, 5], perturbation: 20, clamp: [0, 100] },
-  sourceCapacity: { key: "sensitivity.variable.source_capacity", unit: "MWth", path: ["input", "wasteHeat", "maxPowerMW"], defaults: value => [0, Math.max(1, value * 1.5), Math.max(0.1, value / 10)], perturbation: value => Math.max(0.1, value * 0.2), clampMin: 0 },
+  sourceCapacity: { key: "sensitivity.variable.source_capacity", unit: "MW", path: ["input", "wasteHeat", "maxPowerMW"], defaults: value => [0, Math.max(1, value * 1.5), Math.max(0.1, value / 10)], perturbation: value => Math.max(0.1, value * 0.2), clampMin: 0 },
   industrialSourceTemperature: { key: "sensitivity.variable.industrial_source_temperature", unit: "°C", path: ["input", "industrialWasteHeat", "sourceTempC"], defaults: value => [value - 10, value + 10, 2], perturbation: 5 },
   industrialAvailability: { key: "sensitivity.variable.industrial_availability", unit: "%", path: ["input", "industrialWasteHeat", "availabilityPercent"], defaults: () => [0, 100, 10], perturbation: 20, clamp: [0, 100] },
-  industrialCapacity: { key: "sensitivity.variable.industrial_capacity", unit: "kWth", path: ["input", "industrialWasteHeat", "availableThermalKW"], defaults: value => [0, Math.max(100, value * 1.5), Math.max(50, value / 10)], perturbation: value => Math.max(100, value * 0.2), clampMin: 0 },
+  industrialCapacity: { key: "sensitivity.variable.industrial_capacity", unit: "MW", displayScale: 0.001, path: ["input", "industrialWasteHeat", "availableThermalKW"], defaults: value => [0, Math.max(100, value * 1.5), Math.max(50, value / 10)], perturbation: value => Math.max(100, value * 0.2), clampMin: 0 },
+  wastewaterSourceTemperature: { key: "sensitivity.variable.wastewater_temperature", unit: "°C", path: ["input", "wastewaterHeat", "sourceTempC"], defaults: value => [value - 5, value + 5, 1], perturbation: 2 },
+  wastewaterPrice: { key: "sensitivity.variable.wastewater_price", unit: "€/MWh", path: ["prices", "wastewaterHeatCostPerMWh"], defaults: () => [0, 60, 5], perturbation: 10, clampMin: 0 },
+  greenhouseCapacity: { key: "sensitivity.variable.greenhouse_capacity", unit: "MW", displayScale: 0.001, path: ["input", "flexibleSinks", "greenhouse", "maxDemandKW"], defaults: value => [0, Math.max(100, value * 1.5), Math.max(50, value / 10)], perturbation: value => Math.max(100, value * 0.2), clampMin: 0 },
+  greenhouseMinimumTemperature: { key: "sensitivity.variable.greenhouse_temperature", unit: "°C", path: ["input", "flexibleSinks", "greenhouse", "minimumTemperatureC"], defaults: value => [value - 10, value + 10, 2], perturbation: 5 },
+  absorptionCOP: { key: "sensitivity.variable.absorption_cop", unit: "COP", path: ["input", "flexibleSinks", "absorptionCooling", "thermalCOP"], defaults: () => [0.4, 1, 0.05], perturbation: 0.1, clampMin: 0 },
+  absorptionMinimumTemperature: { key: "sensitivity.variable.absorption_temperature", unit: "°C", path: ["input", "flexibleSinks", "absorptionCooling", "minimumDrivingTempC"], defaults: value => [value - 10, value + 10, 2], perturbation: 5 },
+  coolingPrice: { key: "sensitivity.variable.cooling_price", unit: "€/MWh", path: ["prices", "coolingPricePerMWh"], defaults: () => [0, 100, 10], perturbation: 10, clampMin: 0 },
   industrialPathLoss: { key: "sensitivity.variable.industrial_path_loss", unit: "K", path: ["input", "industrialWasteHeat", "lossToHMP"], defaults: value => [Math.max(0, value - 5), value + 5, 1], perturbation: 2, clampMin: 0 },
   boosterCOP: { key: "sensitivity.variable.booster_cop", unit: "COP", path: ["input", "booster", "cop"], defaults: () => [2, 5, 0.25], perturbation: 0.5, clampMin: 1.01 },
   dcOneStageCOP: { key: "sensitivity.variable.dc_one_stage_cop", unit: "COP", path: ["input", "wasteHeat", "singleStageCOP"], defaults: value => [Math.max(1.1, value - 1), value + 1, 0.25], perturbation: 0.5, clampMin: 1.01 },
   dcStage1COP: { key: "sensitivity.variable.dc_stage1_cop", unit: "COP", path: ["input", "wasteHeat", "stage1COP"], defaults: value => [Math.max(1.1, value - 1), value + 1, 0.25], perturbation: 0.5, clampMin: 1.01 },
   dcStage2COP: { key: "sensitivity.variable.dc_stage2_cop", unit: "COP", path: ["input", "wasteHeat", "stage2COP"], defaults: value => [Math.max(1.1, value - 1), value + 1, 0.25], perturbation: 0.5, clampMin: 1.01 },
   branchMinimum: { key: "sensitivity.variable.branch_minimum", unit: "°C", defaults: value => [value - 10, value + 10, 1], perturbation: 5 },
-  branchDemand: { key: "sensitivity.variable.branch_demand", unit: "kW", defaults: value => [Math.max(0, value * 0.5), value * 1.5, Math.max(1, value / 10)], perturbation: value => Math.max(1, value * 0.2), clampMin: 0 },
+  branchDemand: { key: "sensitivity.variable.branch_demand", unit: "MW", displayScale: 0.001, defaults: value => [Math.max(0, value * 0.5), value * 1.5, Math.max(1, value / 10)], perturbation: value => Math.max(1, value * 0.2), clampMin: 0 },
   outdoorTemperature: { key: "sensitivity.variable.outdoor_temperature", unit: "°C", path: ["input", "outdoorTemp"], defaults: value => [value - 15, value + 15, 2], perturbation: 5 },
   plantSupplyTemperature: { key: "sensitivity.variable.plant_supply_temperature", unit: "°C", path: ["input", "centralPlant", "supplyTemp"], defaults: value => [value - 10, value + 10, 1], perturbation: 5 },
   pathLoss: { key: "sensitivity.variable.path_loss", unit: "K", path: ["input", "wasteHeat", "lossToHMP"], defaults: value => [Math.max(0, value - 5), value + 5, 1], perturbation: 2, clampMin: 0 }
@@ -45,7 +52,8 @@ export function createSensitivitySpec(variable, input, prices = {}, branchId = "
   if (variable === "dcHPCOP") variable = input.wasteHeat.mode === "one-stage" ? "dcOneStageCOP" : stage === "stage1" ? "dcStage1COP" : "dcStage2COP";
   const item = resolve(variable, input, prices, branchId);
   const [min, max, step] = item.field.defaults(item.value);
-  return { variable, branchId: item.branchId ?? null, currentValue: item.value, min: round(min), max: round(max), step: round(step),
+  const scale = item.field.displayScale ?? 1;
+  return { variable, branchId: item.branchId ?? null, currentValue: round(item.value * scale), min: round(min * scale), max: round(max * scale), step: round(step * scale),
     unit: item.field.unit, labelKey: item.field.key };
 }
 
@@ -64,7 +72,7 @@ export function applySensitivityValue(input, prices, spec, value) {
   if (!Number.isFinite(Number(value))) throw new Error("Sensitivity value must be finite.");
   const nextInput = clone(input), nextPrices = clone(prices ?? {}), resolvedVariable = spec.variable === "dcHPCOP"
     ? nextInput.wasteHeat.mode === "one-stage" ? "dcOneStageCOP" : spec.stage === "stage1" ? "dcStage1COP" : "dcStage2COP" : spec.variable;
-  const field = fields[resolvedVariable], numeric = Number(value);
+  const field = fields[resolvedVariable], numeric = Number(value) / (field?.displayScale ?? 1);
   if (!field) throw new Error("Choose a supported sensitivity variable.");
   const min = field.clamp?.[0] ?? field.clampMin, max = field.clamp?.[1];
   if (min != null && numeric < min || max != null && numeric > max) throw new Error("Sensitivity value is outside the supported input range.");

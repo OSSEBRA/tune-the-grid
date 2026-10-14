@@ -94,8 +94,8 @@ function update() {
       const extreme = requiredElement("extreme-warning");
       extreme.hidden = result.boostOutlet < 100;
       extreme.textContent = "Above 100 °C: this exceeds water’s boiling point at atmospheric pressure. Pressurized district-heating systems can operate above it; confirm system pressure and component ratings. Advisory only, not a feasibility cutoff.";
-      setText("thermal-result", fmt(result.thermalPower)); setText("electric-result", fmt(result.electricPower));
-      setText("source-result", fmt(result.sourceHeat)); setText("bypass-result", fmt(result.bypassFlow));
+      setText("thermal-result", fmt(result.thermalPower / 1000, 2)); setText("electric-result", fmt(result.electricPower));
+      setText("source-result", fmt(result.sourceHeat / 1000, 2)); setText("bypass-result", fmt(result.bypassFlow));
       setText("share-result", fmt(result.boostedShare)); setText("lift-result", fmt(result.temperatureLift));
       setText("schematic-inlet", `${fmt(Number(input.inletTemp))}°C`); setText("schematic-total", `${fmt(Number(input.totalFlow))} m³/h`);
       setText("schematic-boost-flow", `${fmt(Number(input.boostFlow))} m³/h`); setText("schematic-boost-out", `${fmt(result.boostOutlet)}°C`);
@@ -132,8 +132,8 @@ function update() {
   const targetReachable = target >= Number(input.inletTemp) && target <= Number(input.boostOutlet);
   const onTarget = targetReachable && Math.abs(delta) < 0.05;
   ids["mixed-result"].textContent = fmt(result.mixedTemp, 2); ids["target-result"].textContent = fmt(target, 1);
-  ids["thermal-result"].textContent = fmt(result.thermalPower); ids["electric-result"].textContent = fmt(result.electricPower);
-  ids["source-result"].textContent = fmt(result.sourceHeat); ids["bypass-result"].textContent = fmt(result.bypassFlow);
+  ids["thermal-result"].textContent = fmt(result.thermalPower / 1000, 2); ids["electric-result"].textContent = fmt(result.electricPower);
+  ids["source-result"].textContent = fmt(result.sourceHeat / 1000, 2); ids["bypass-result"].textContent = fmt(result.bypassFlow);
   ids["share-result"].textContent = fmt(result.boostedShare); ids["lift-result"].textContent = fmt(result.temperatureLift);
   ids["schematic-inlet"].textContent = `${fmt(Number(input.inletTemp))}°C`; ids["schematic-total"].textContent = `${fmt(Number(input.totalFlow))} m³/h`;
   ids["schematic-boost-flow"].textContent = `${fmt(Number(input.boostFlow))} m³/h`;
@@ -181,8 +181,8 @@ document.querySelectorAll("[data-solve]").forEach(button => button.addEventListe
       message.textContent = value < Number(input.inletTemp) ? "Impossible: required outlet is below network supply." : "Required booster outlet temperature calculated.";
     } else {
       const result = calculate(input);
-      requiredElement("reverse-power-output").textContent = `${fmt(result.thermalPower)} kW thermal`;
-      message.textContent = `Heat pump input ${fmt(result.electricPower)} kW electric · ${fmt(result.sourceHeat)} kW source heat extracted.`;
+      requiredElement("reverse-power-output").textContent = `${fmt(result.thermalPower / 1000, 2)} MW`;
+      message.textContent = `Heat pump input ${fmt(result.electricPower)} kW · ${fmt(result.sourceHeat / 1000, 2)} MW source heat extracted.`;
     }
   } catch (error) { message.textContent = `Cannot solve: ${error.message}`; }
 }));

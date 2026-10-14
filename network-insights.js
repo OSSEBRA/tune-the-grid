@@ -5,7 +5,7 @@ import {
   isReturnSourceAvailableToConsumer,
   lowestSupportedPoint,
   summarizeNetworkFlexState
-} from "./network-model.js?v=20261013-2";
+} from "./network-model.js?v=20261014-1";
 
 const clone = value => globalThis.structuredClone
   ? structuredClone(value)
@@ -62,9 +62,16 @@ export function analyzeSystemOpportunity(input, result) {
       shortfallK: capability == null ? null : Math.max(0, Number(operating.hmpTargetTemp) - capability), sourceMode: selectedSource.mode });
   }
   const industrial = operating.industrialWasteHeat;
-  if (Number(industrial?.availableKW) > 0 && !industrial.temperatureEligible) {
+  if (Number(industrial?.availableKW) > 0 && industrial.status === "TEMPERATURE BLOCKED") {
     const capability = number(industrial.contributionTemp);
     constraints.push({ type: "source-temperature", sourceId: "industrial-waste-heat", sourceName: "Industrial Waste Heat",
+      capabilityTempC: capability, targetTempC: number(operating.hmpTargetTemp),
+      shortfallK: capability == null ? null : Math.max(0, Number(operating.hmpTargetTemp) - capability) });
+  }
+  const wastewater = operating.wastewaterHeat;
+  if (Number(wastewater?.availableKW) > 0 && wastewater.status === "TEMPERATURE BLOCKED") {
+    const capability = number(wastewater.contributionTemp);
+    constraints.push({ type: "source-temperature", sourceId: "wastewater-heat-recovery", sourceName: "Wastewater Heat Recovery",
       capabilityTempC: capability, targetTempC: number(operating.hmpTargetTemp),
       shortfallK: capability == null ? null : Math.max(0, Number(operating.hmpTargetTemp) - capability) });
   }
@@ -76,9 +83,106 @@ export function analyzeSystemOpportunity(input, result) {
   if (Number(operating.hmpPowerShortfallKW) > 1e-8) constraints.push({ type: "source-capacity", shortfallKW: Number(operating.hmpPowerShortfallKW), availableKW: number(operating.hmpPowerAvailableKW), demandKW: number(operating.totalDemandKW) });
   const topology = returnTopologyConstraint(input, result.returnNetwork);
   if (topology) constraints.push({ type: "return-topology", ...topology });
+  const sinks = operating.flexibleSinks;
+  if (Number(sinks?.curtailedHeatKW) > 1e-8) constraints.push({ type: "demand-limited", surplusHeatKW: number(sinks.surplusHeatKW), curtailedHeatKW: number(sinks.curtailedHeatKW) });
+  if (Number(sinks?.surplusHeatKW) > 1e-8 && input.flexibleSinks?.greenhouse?.enabled === false)
+    constraints.push({ type: "greenhouse-opportunity", surplusHeatKW: number(sinks.surplusHeatKW) });
+  if (Number(sinks?.absorptionCooling?.heatInputKW) <= 1e-8 && Number(sinks?.surplusHeatKW) > 1e-8)
+    constraints.push({ type: sinks?.absorptionCooling?.temperatureEligible ? "absorption-cooling-opportunity" : "absorption-cooling-temperature", minimumTempC: number(sinks?.absorptionCooling?.minimumDrivingTempC) });
 
   const primary = constraints[0] ?? { type: "none" };
   return { primary, constraints, operating, returnNetwork: result.returnNetwork };
+}
+
+export function selectCasualSystemGuidance(beforeResult, currentResult, beforeMetrics, currentMetrics, constraints = []) {
+  const before = beforeResult?.withBooster ?? {};
+  const current = currentResult?.withBooster ?? {};
+  const value = input => finite(input) ? Number(input) : 0;
+  const heatUsed = metrics => value(metrics?.usableWasteHeatKW)
+    + Math.max(0, value(metrics?.flexibleSinkHeatKW) - value(metrics?.flexibleSinks?.greenhouse?.supplyHeatKW)
+      - value(metrics?.flexibleSinks?.absorptionCooling?.heatInputKW));
+  const heatChangeKW = heatUsed(currentMetrics) - heatUsed(beforeMetrics);
+  const flexibleChangeKW = value(currentMetrics?.flexibleSinkHeatKW) - value(beforeMetrics?.flexibleSinkHeatKW);
+  const centralReductionKW = value(before.centralPlantUsedKW) - value(current.centralPlantUsedKW);
+  const costBenefitPerHour = value(beforeMetrics?.operatingCostPerHour) - value(currentMetrics?.operatingCostPerHour);
+  const curtailedReductionKW = value(before.flexibleSinks?.curtailedHeatKW) - value(current.flexibleSinks?.curtailedHeatKW);
+  const hmpReductionC = value(before.hmpTargetTemp) - value(current.hmpTargetTemp);
+  const feasibleCount = operating => (operating.afterBranches ?? []).filter(branch => branch.finalMargin != null
+    && Number.isFinite(Number(branch.finalMargin)) && Number(branch.finalMargin) >= -1e-8).length;
+  const feasibleBranchChange = feasibleCount(current) - feasibleCount(before);
+  const usedSources = (result, metrics) => {
+    const sources = new Map([
+      ["data-center", value(metrics?.dataCenterInjectedHeatKW) + value(metrics?.dataCenterFlexibleHeatUsedKW)],
+      ["industrial", value(metrics?.industrialWasteHeatUsedKW) + value(metrics?.industrialFlexibleHeatUsedKW)],
+      ["wastewater", value(metrics?.wastewaterHeatUsedKW) + value(metrics?.wastewaterFlexibleHeatUsedKW)]
+    ]);
+    for (const source of result?.returnNetwork?.sources ?? []) {
+      const key = source.id === "DC-RETURN" ? "data-center" : source.id === "SM-1" ? "supermarket" : source.id;
+      sources.set(key, Math.max(sources.get(key) ?? 0, value(source.dispatchedKW)));
+    }
+    return new Set([...sources].filter(([, usedKW]) => usedKW > 5).map(([id]) => id));
+  };
+  const beforeSources = usedSources(beforeResult, beforeMetrics);
+  const currentSources = usedSources(currentResult, currentMetrics);
+  const newSourceCount = [...currentSources].filter(id => !beforeSources.has(id)).length;
+  const improved = heatChangeKW > 5 || flexibleChangeKW > 5 || centralReductionKW > 5 || newSourceCount > 0
+    || costBenefitPerHour > 0.005 || curtailedReductionKW > 5 || feasibleBranchChange > 0
+    || hmpReductionC >= 0.25;
+  const worsened = heatChangeKW < -5 || centralReductionKW < -5 || costBenefitPerHour < -0.005
+    || curtailedReductionKW < -5 || feasibleBranchChange < 0;
+
+  let resultKey = "casual.result.no_change";
+  let resultArgs = {};
+  if (heatChangeKW < -5 && costBenefitPerHour < -0.005) {
+    resultKey = "casual.result.worse_both";
+    resultArgs = { heat: (Math.abs(heatChangeKW) / 1000).toFixed(2), cost: Math.abs(costBenefitPerHour).toFixed(2) };
+  } else if (heatChangeKW > 5) {
+    resultKey = costBenefitPerHour > 0.005 ? "casual.result.heat_cost_down"
+      : costBenefitPerHour < -0.005 ? "casual.result.heat_cost_up" : "casual.result.heat";
+    resultArgs = { heat: (heatChangeKW / 1000).toFixed(2), cost: (Math.abs(costBenefitPerHour)).toFixed(2) };
+  } else if (flexibleChangeKW > 5) {
+    resultKey = "casual.result.flexible"; resultArgs = { heat: (flexibleChangeKW / 1000).toFixed(2) };
+  } else if (centralReductionKW > 5) {
+    resultKey = costBenefitPerHour < -0.005 ? "casual.result.central_cost_up" : "casual.result.central";
+    resultArgs = { heat: (centralReductionKW / 1000).toFixed(2), cost: Math.abs(costBenefitPerHour).toFixed(2) };
+  } else if (feasibleBranchChange > 0) {
+    resultKey = costBenefitPerHour < -0.005 ? "casual.result.branches_cost_up" : "casual.result.branches";
+    resultArgs = { branches: feasibleBranchChange, cost: Math.abs(costBenefitPerHour).toFixed(2) };
+  } else if (curtailedReductionKW > 5) {
+    resultKey = "casual.result.curtailment"; resultArgs = { heat: (curtailedReductionKW / 1000).toFixed(2) };
+  } else if (hmpReductionC >= 0.25 && improved) {
+    resultKey = "casual.result.cooler"; resultArgs = { temperature: hmpReductionC.toFixed(1) };
+  } else if (newSourceCount > 0) {
+    resultKey = "casual.result.sources"; resultArgs = { sources: newSourceCount };
+  } else if (!improved && worsened) {
+    resultKey = heatChangeKW < -5 && costBenefitPerHour < -0.005 ? "casual.result.worse_both"
+      : costBenefitPerHour < -0.005 ? "casual.result.worse_cost"
+        : heatChangeKW < -5 ? "casual.result.worse_heat"
+          : centralReductionKW < -5 ? "casual.result.central_up"
+            : curtailedReductionKW < -5 ? "casual.result.curtailment_up" : "casual.result.branches_down";
+    resultArgs = { heat: (Math.abs(centralReductionKW < -5 ? centralReductionKW : curtailedReductionKW < -5 ? curtailedReductionKW : heatChangeKW) / 1000).toFixed(2),
+      cost: Math.abs(costBenefitPerHour).toFixed(2), branches: Math.abs(feasibleBranchChange) };
+  }
+
+  const branchLimit = constraints.find(item => item.type === "branch-temperature");
+  const sourceLimit = constraints.find(item => item.type === "source-temperature");
+  const flexibleLimit = constraints.find(item => ["demand-limited", "greenhouse-opportunity", "absorption-cooling-opportunity", "absorption-cooling-temperature"].includes(item.type));
+  const capacityLimit = constraints.find(item => item.type === "source-capacity");
+  const topologyLimit = constraints.find(item => item.type === "return-topology");
+  let nextKey = "casual.next.complete";
+  let nextArgs = {};
+  if (branchLimit) {
+    nextArgs.branch = branchLimit.branchId;
+    const branch = current.afterBranches?.find(item => item.id === branchLimit.branchId);
+    const boosterElsewhere = (current.afterBranches ?? []).some(item => item.id !== branchLimit.branchId && item.gridBoosters?.length);
+    nextKey = branch?.gridBoosters?.length || boosterElsewhere ? "casual.next.branch_move" : "casual.next.branch_boost";
+  } else if (sourceLimit) nextKey = "casual.next.source";
+  else if (flexibleLimit) nextKey = "casual.next.flexible";
+  else if (capacityLimit) nextKey = "casual.next.capacity";
+  else if (topologyLimit) nextKey = "casual.next.return";
+  else if (!improved && worsened) nextKey = "casual.next.review";
+
+  return { resultKey, resultArgs, nextKey, nextArgs, heatChangeKW, costBenefitPerHour, newSourceCount };
 }
 
 export function calculateOpportunityIntervention(input, result, prices = {}) {
@@ -127,6 +231,8 @@ const assumptionFields = [
   ["prices.electricityPricePerMWh", "electricityPrice"],
   ["prices.centralHeatCostPerMWh", "centralHeatPrice"],
   ["prices.wasteHeatCostPerMWh", "wasteHeatPrice"],
+  ["prices.wastewaterHeatCostPerMWh", "wastewaterHeatPrice"],
+  ["prices.coolingPricePerMWh", "coolingPrice"],
   ["input.centralPlant.maxPowerMW", "centralPlantCapacity"],
   ["input.centralPlant.supplyTemp", "centralPlantConditions"],
   ["input.centralPlant.lossToHMP", "sourcePathLosses"],
@@ -139,6 +245,8 @@ const assumptionFields = [
   ["input.industrialWasteHeat.sourceTempC", "industrialWasteHeatConditions"],
   ["input.industrialWasteHeat.lossToHMP", "sourcePathLosses"],
   ["prices.industrialWasteHeatCostPerMWh", "industrialWasteHeatPrice"],
+  ["input.wastewaterHeat", "wastewaterSource"],
+  ["input.flexibleSinks", "flexibleHeatSinks"],
   ["input.normalPlantSupplyTemp", "plantRampConditions"],
   ["input.maxRampedPlantSupplyTemp", "plantRampConditions"],
   ["input.plantRampCostPerMWhPerK", "plantRampConditions"],
@@ -202,9 +310,15 @@ export function summarizeScenarioResult(snapshot) {
     dataCenterMode: operating.wasteHeat?.mode ?? input.wasteHeat?.mode,
     rawReturnHeatKW: operating.wasteHeat?.mode === "raw-return" ? number(rawReturnSource?.dispatchedKW) ?? 0 : 0,
     upgradedSupplyHeatKW: operating.wasteHeat?.mode !== "raw-return" ? number(operating.wasteHeatUsedKW) ?? 0 : 0,
-    dataCenterSupplyHeatKW: number(operating.wasteHeatUsedKW) ?? 0,
-    industrialSupplyHeatKW: number(operating.industrialWasteHeatUsedKW) ?? 0,
-    usableWasteHeatKW: number(operating.totalWasteHeatUsedKW) ?? 0,
+    dataCenterSupplyHeatKW: Number(operating.dataCenterHeatUsedKW ?? 0) + Number(operating.wasteHeat.flexibleDeliveredHeatKW ?? 0),
+    industrialSupplyHeatKW: Number(operating.industrialWasteHeatUsedKW ?? 0) + Number(operating.industrialWasteHeat.flexibleUsedKW ?? 0),
+    wastewaterSupplyHeatKW: Number(operating.wastewaterHeatUsedKW ?? 0) + Number(operating.wastewaterHeat.flexibleUsedKW ?? 0),
+    greenhouseHeatKW: number(operating.flexibleSinks?.greenhouse.totalHeatKW) ?? 0,
+    absorptionHeatInputKW: number(operating.flexibleSinks?.absorptionCooling.heatInputKW) ?? 0,
+    coolingOutputKW: number(operating.flexibleSinks?.absorptionCooling.coolingOutputKW) ?? 0,
+    surplusHeatKW: number(operating.flexibleSinks?.surplusHeatKW) ?? 0,
+    curtailedHeatKW: number(operating.flexibleSinks?.curtailedHeatKW) ?? 0,
+    usableWasteHeatKW: metrics.usableWasteHeatKW,
     returnHeatKW,
     supplyTopUpKW: Math.max(0, demandKW - returnHeatKW),
     returnTempAtPlantC: number(state.returnNetwork?.returnTempAtPlantC),
