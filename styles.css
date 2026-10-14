@@ -1084,6 +1084,16 @@ body[data-mode="demo"] .supply-source-stack{grid-template-rows:minmax(0,1fr);ali
 body[data-mode="demo"] #supply-network-view .source-network{grid-template-columns:minmax(0,1fr) minmax(130px,160px) minmax(0,1fr);min-height:240px}
 body[data-mode="demo"] #supply-network-view .left-supply-source-stack .plant-node,
 body[data-mode="demo"] #supply-network-view .supply-source-stack .dc-node{width:min(78%,170px);min-height:142px}
+body[data-mode="demo"] #supply-network-view .plant-arm .plant-node{transform:translateX(-16px)}
+body[data-mode="demo"] #supply-network-view .dc-arm .dc-node{transform:translateX(16px)}
+body[data-mode="demo"] #supply-network-view .plant-arm .source-pipe span,
+body[data-mode="demo"] #supply-network-view .dc-arm .source-pipe span{width:max-content;max-width:180px;white-space:nowrap}
+body[data-mode="demo"] #supply-network-view .dc-arm .source-pipe span{transform:translateX(calc(-50% + 7px))}
+@media(min-width:761px) and (max-width:1200px){
+  body[data-mode="demo"] #supply-network-view .plant-arm .source-pipe span,
+  body[data-mode="demo"] #supply-network-view .dc-arm .source-pipe span{top:-31px;width:44px;max-width:44px;white-space:normal;line-height:1.1}
+  body[data-mode="demo"] #supply-network-view .plant-arm .source-pipe span{top:-31px;width:44px;max-width:44px;white-space:normal;line-height:1.1}
+}
 .source-network .plant-arm .source-feeder-elbow,.source-network .wastewater-arm .source-feeder-elbow,
 .full-source-network .plant-arm .source-feeder-elbow,.full-source-network .wastewater-arm .source-feeder-elbow{position:absolute;z-index:1;top:var(--feeder-elbow-top);left:calc(var(--feeder-source-right) - 3px);width:7px;height:var(--feeder-elbow-height);border-right:2px solid var(--navy);border-left:2px solid var(--navy);pointer-events:none}
 .source-network .plant-arm .source-feeder-elbow,.full-source-network .plant-arm .source-feeder-elbow{background:var(--source-plant);border-color:var(--source-plant-dark)}

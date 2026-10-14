@@ -1963,7 +1963,8 @@ function updateHmpSourceFeederGeometry() {
     const armRect = arm.getBoundingClientRect(), sourceRect = source.getBoundingClientRect(), hmpRect = hmp.getBoundingClientRect();
     if (!armRect.width || !hmpRect.width || !hmpRect.height) continue;
     const sourceCenterY = sourceRect.top + sourceRect.height / 2;
-    const anchorY = hmpRect.top + hmpRect.height * anchorRatio;
+    const effectiveAnchorRatio = document.body.dataset.mode === "demo" && hmpId === "hmp-node" ? 0.5 : anchorRatio;
+    const anchorY = hmpRect.top + hmpRect.height * effectiveAnchorRatio;
     const sourceLeft = sourceRect.left - armRect.left;
     const sourceRight = sourceRect.right - armRect.left;
     arm.setAttribute("style", `--hmp-feeder-y:${anchorY - armRect.top}px;--feeder-source-left:${sourceLeft}px;--feeder-source-right:${sourceRight}px;--feeder-elbow-top:${Math.min(sourceCenterY, anchorY) - armRect.top}px;--feeder-elbow-height:${Math.abs(sourceCenterY - anchorY)}px`);
@@ -2033,7 +2034,8 @@ function render(result, input) {
   set("map-dc-availability", `${fmt(Number($("dc-availability").value), 0)}% AVAILABLE`);
   const usedViaBlending = source.usedViaBlending === true;
   const strictEligible = source.strictTemperatureEligible ?? source.injectionEligible;
-  set("map-dc-loss", source.mode === "raw-return" ? "SUPPLY ROUTE INACTIVE · RAW HEAT GOES TO RETURN" : `−${fmt(source.lossToHMP)} K LOSS · ${usedViaBlending ? "USED VIA BLENDING ▶" : strictEligible ? "STRICTLY ELIGIBLE ▶" : "STRICTLY BLOCKED"}`);
+  const dcFeederLabel = source.mode === "raw-return" ? "RAW → RETURN" : `−${fmt(source.lossToHMP)} K LOSS`;
+  set("map-dc-loss", document.body.dataset.mode === "demo" ? dcFeederLabel : source.mode === "raw-return" ? "SUPPLY ROUTE INACTIVE · RAW HEAT GOES TO RETURN" : `−${fmt(source.lossToHMP)} K LOSS · ${usedViaBlending ? "USED VIA BLENDING ▶" : strictEligible ? "STRICTLY ELIGIBLE ▶" : "STRICTLY BLOCKED"}`);
   set("map-dc-status", source.mode === "raw-return" ? "RAW RETURN ONLY · NO HMP INJECTION" : usedViaBlending ? `STRICTLY BLOCKED · USED VIA BLENDED SOURCE OPERATION · ${fmt(source.injectedKW)} kWth` : !strictEligible ? "⛔ CANNOT INJECT · T ≤ HMP TARGET" : source.injectedKW > 0 ? `▶ ${source.mode.toUpperCase()} · INJECTING` : "✓ TEMP ELIGIBLE · NO HEAT INJECTED");
   $("map-dc-status").className = `mini-status ${strictEligible || usedViaBlending ? "eligible" : "ineligible"}`;
   $("plant-feed-pipe").classList.toggle("pipe-blocked", !plant.temperatureEligible || after.centralPlantUsedKW <= 0);
