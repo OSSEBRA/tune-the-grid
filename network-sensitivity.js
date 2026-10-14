@@ -1,5 +1,5 @@
-import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261013-2";
-import { analyzeSystemOpportunity } from "./network-insights.js?v=20261011-2";
+import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261014-1";
+import { analyzeSystemOpportunity } from "./network-insights.js?v=20261014-1";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const round = value => Number(Number(value).toFixed(8));
@@ -14,6 +14,13 @@ const fields = {
   industrialSourceTemperature: { key: "sensitivity.variable.industrial_source_temperature", unit: "°C", path: ["input", "industrialWasteHeat", "sourceTempC"], defaults: value => [value - 10, value + 10, 2], perturbation: 5 },
   industrialAvailability: { key: "sensitivity.variable.industrial_availability", unit: "%", path: ["input", "industrialWasteHeat", "availabilityPercent"], defaults: () => [0, 100, 10], perturbation: 20, clamp: [0, 100] },
   industrialCapacity: { key: "sensitivity.variable.industrial_capacity", unit: "kWth", path: ["input", "industrialWasteHeat", "availableThermalKW"], defaults: value => [0, Math.max(100, value * 1.5), Math.max(50, value / 10)], perturbation: value => Math.max(100, value * 0.2), clampMin: 0 },
+  wastewaterSourceTemperature: { key: "sensitivity.variable.wastewater_temperature", unit: "°C", path: ["input", "wastewaterHeat", "sourceTempC"], defaults: value => [value - 5, value + 5, 1], perturbation: 2 },
+  wastewaterPrice: { key: "sensitivity.variable.wastewater_price", unit: "€/MWh", path: ["prices", "wastewaterHeatCostPerMWh"], defaults: () => [0, 60, 5], perturbation: 10, clampMin: 0 },
+  greenhouseCapacity: { key: "sensitivity.variable.greenhouse_capacity", unit: "kWth", path: ["input", "flexibleSinks", "greenhouse", "maxDemandKW"], defaults: value => [0, Math.max(100, value * 1.5), Math.max(50, value / 10)], perturbation: value => Math.max(100, value * 0.2), clampMin: 0 },
+  greenhouseMinimumTemperature: { key: "sensitivity.variable.greenhouse_temperature", unit: "°C", path: ["input", "flexibleSinks", "greenhouse", "minimumTemperatureC"], defaults: value => [value - 10, value + 10, 2], perturbation: 5 },
+  absorptionCOP: { key: "sensitivity.variable.absorption_cop", unit: "COP", path: ["input", "flexibleSinks", "absorptionCooling", "thermalCOP"], defaults: () => [0.4, 1, 0.05], perturbation: 0.1, clampMin: 0 },
+  absorptionMinimumTemperature: { key: "sensitivity.variable.absorption_temperature", unit: "°C", path: ["input", "flexibleSinks", "absorptionCooling", "minimumDrivingTempC"], defaults: value => [value - 10, value + 10, 2], perturbation: 5 },
+  coolingPrice: { key: "sensitivity.variable.cooling_price", unit: "€/MWh", path: ["prices", "coolingPricePerMWh"], defaults: () => [0, 100, 10], perturbation: 10, clampMin: 0 },
   industrialPathLoss: { key: "sensitivity.variable.industrial_path_loss", unit: "K", path: ["input", "industrialWasteHeat", "lossToHMP"], defaults: value => [Math.max(0, value - 5), value + 5, 1], perturbation: 2, clampMin: 0 },
   boosterCOP: { key: "sensitivity.variable.booster_cop", unit: "COP", path: ["input", "booster", "cop"], defaults: () => [2, 5, 0.25], perturbation: 0.5, clampMin: 1.01 },
   dcOneStageCOP: { key: "sensitivity.variable.dc_one_stage_cop", unit: "COP", path: ["input", "wasteHeat", "singleStageCOP"], defaults: value => [Math.max(1.1, value - 1), value + 1, 0.25], perturbation: 0.5, clampMin: 1.01 },

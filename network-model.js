@@ -261,6 +261,93 @@ export function calculateIndustrialWasteHeat(source = {}, hmpTargetTemp = 0) {
     status: availableKW <= 0 ? "UNAVAILABLE" : !temperatureEligible ? "TEMPERATURE BLOCKED" : "AVAILABLE / NOT USED" };
 }
 
+export function calculateWastewaterHeat(source = {}, hmpTargetTemp = 0) {
+  const sourceTempC = Number(source.sourceTempC ?? 80);
+  const lossToHMP = Number(source.lossToHMP ?? 1);
+  const availableKW = Math.max(0, Number(source.availableThermalKW ?? 2500)) * Math.max(0, Number(source.availabilityPercent ?? 100)) / 100;
+  const contributionTemp = sourceTempC - lossToHMP;
+  const temperatureEligible = source.enabled !== false && contributionTemp >= Number(hmpTargetTemp);
+  const usableKW = temperatureEligible ? availableKW : 0;
+  return { sourceTempC, contributionTemp, lossToHMP, availableKW, temperatureEligible, usableKW, injectedKW: 0,
+    status: source.enabled === false || availableKW <= 0 ? "UNAVAILABLE" : !temperatureEligible ? "TEMPERATURE BLOCKED" : "AVAILABLE / NOT USED" };
+}
+
+export function dispatchFlexibleHeatSinks(operating, flexibleSinks = {}, returnNetwork = {}, prices = {}) {
+  const network = { ...returnNetwork, sources: (returnNetwork.sources ?? []).map(source => ({ ...source })),
+    nodes: (returnNetwork.nodes ?? []).map(node => ({ ...node })) };
+  const greenhouse = flexibleSinks.greenhouse ?? {};
+  const cooling = flexibleSinks.absorptionCooling ?? {};
+  const supplySources = [
+    { id: "DATA-CENTER-SUPPLY", remainingKW: operating.wasteHeat?.mode === "raw-return" ? 0
+      : Math.max(0, Number(operating.wasteHeat?.usableKW ?? 0) - Number(operating.dataCenterHeatUsedKW ?? 0)) },
+    { id: "INDUSTRIAL", remainingKW: Math.max(0, Number(operating.industrialWasteHeat?.usableKW ?? 0) - Number(operating.industrialWasteHeat?.injectedKW ?? 0)) },
+    { id: "WASTEWATER", remainingKW: Math.max(0, Number(operating.wastewaterHeat?.usableKW ?? 0) - Number(operating.wastewaterHeat?.injectedKW ?? 0)) }
+  ];
+  for (const source of supplySources) source.flexibleUsedKW = 0;
+  const allocateSupply = amount => {
+    let remaining = amount;
+    for (const source of supplySources) {
+      const used = Math.min(remaining, source.remainingKW);
+      source.remainingKW -= used;
+      source.flexibleUsedKW += used;
+      remaining -= used;
+      if (remaining <= 1e-9) break;
+    }
+  };
+  let supplyRemainingKW = supplySources.reduce((sum, source) => sum + source.remainingKW, 0);
+  const returnSources = network.sources.filter(source => source.enabled !== false
+    && Number(source.sourceTempC) >= Number(greenhouse.minimumTemperatureC ?? 50));
+  let returnRemainingKW = returnSources.reduce((sum, source) => sum + Math.max(0, Number(source.remainingKW ?? 0)), 0);
+  const greenhouseDemandKW = greenhouse.enabled === false ? 0 : Math.max(0, Number(greenhouse.maxDemandKW ?? 2500));
+  const minGreenhouseTemp = Number(greenhouse.minimumTemperatureC ?? 50);
+  const mode = ["supply", "return", "auto"].includes(greenhouse.connectionMode) ? greenhouse.connectionMode : "auto";
+  let greenhouseReturnKW = 0, greenhouseSupplyKW = 0;
+  if (greenhouse.enabled !== false && mode !== "supply") greenhouseReturnKW = Math.min(greenhouseDemandKW, returnRemainingKW);
+  if (greenhouse.enabled !== false && mode !== "return") greenhouseSupplyKW = Math.min(greenhouseDemandKW - greenhouseReturnKW, supplyRemainingKW);
+  let returnToAllocate = greenhouseReturnKW;
+  for (const source of returnSources) {
+    const allocatedKW = Math.min(returnToAllocate, Math.max(0, Number(source.remainingKW ?? 0)));
+    source.remainingKW = Math.max(0, Number(source.remainingKW ?? 0) - allocatedKW);
+    source.flexibleSinkKW = allocatedKW;
+    returnToAllocate -= allocatedKW;
+    if (returnToAllocate <= 1e-9) break;
+  }
+  const usedSupplyKW = greenhouseSupplyKW;
+  allocateSupply(usedSupplyKW);
+  supplyRemainingKW = Math.max(0, supplyRemainingKW - usedSupplyKW);
+  const coolingMinTemp = Number(cooling.minimumDrivingTempC ?? 80);
+  const coolingEnabled = cooling.enabled !== false;
+  const coolingTemperatureEligible = Number(operating.hmpTargetTemp) >= coolingMinTemp;
+  const coolingAvailableKW = coolingEnabled && coolingTemperatureEligible
+    ? Math.min(supplyRemainingKW, Math.max(0, Number(cooling.maxHeatInputKW ?? 2000))) : 0;
+  const coolingCOP = Math.max(0, Number(cooling.thermalCOP ?? 0.7));
+  const coolingOutputKW = coolingAvailableKW * coolingCOP;
+  const coolingRevenuePerHour = coolingOutputKW * Math.max(0, Number(prices.coolingPricePerMWh ?? 50)) / 1000;
+  allocateSupply(coolingAvailableKW);
+  const surplusHeatKW = supplySources.reduce((sum, source) => sum + source.remainingKW + source.flexibleUsedKW, 0) + returnRemainingKW;
+  const flexibleSinkHeatKW = greenhouseReturnKW + greenhouseSupplyKW + coolingAvailableKW;
+  const curtailedHeatKW = Math.max(0, surplusHeatKW - flexibleSinkHeatKW);
+  network.unusedSourceKW = Math.max(0, Number(network.unusedSourceKW ?? 0) - greenhouseReturnKW);
+  operating.flexibleSinks = { greenhouse: { enabled: greenhouse.enabled !== false, connectionMode: mode,
+    minimumTemperatureC: minGreenhouseTemp, supplyHeatKW: greenhouseSupplyKW, returnHeatKW: greenhouseReturnKW,
+    totalHeatKW: greenhouseSupplyKW + greenhouseReturnKW,
+    status: greenhouse.enabled === false ? "DISABLED" : greenhouseReturnKW + greenhouseSupplyKW > 0 ? "USING HEAT" : "NO ELIGIBLE SURPLUS" },
+    absorptionCooling: { enabled: coolingEnabled, temperatureEligible: coolingTemperatureEligible,
+      heatInputKW: coolingAvailableKW, minimumDrivingTempC: coolingMinTemp, thermalCOP: coolingCOP,
+      coolingOutputKW, coolingRevenuePerHour,
+      status: !coolingEnabled ? "DISABLED" : !coolingTemperatureEligible ? "TEMPERATURE LIMITED" : coolingAvailableKW > 0 ? "USING HEAT" : "NO ELIGIBLE SURPLUS" },
+    surplusHeatKW, flexibleSinkHeatKW, curtailedHeatKW,
+    supplyBySourceKW: Object.fromEntries(supplySources.map(source => [source.id, source.flexibleUsedKW])) };
+  operating.wasteHeat.flexibleDeliveredHeatKW = supplySources.find(source => source.id === "DATA-CENTER-SUPPLY")?.flexibleUsedKW ?? 0;
+  operating.industrialWasteHeat.flexibleUsedKW = supplySources.find(source => source.id === "INDUSTRIAL")?.flexibleUsedKW ?? 0;
+  operating.wastewaterHeat.flexibleUsedKW = supplySources.find(source => source.id === "WASTEWATER")?.flexibleUsedKW ?? 0;
+  operating.returnHeatRecoveredForSinksKW = greenhouseReturnKW;
+  const dcReturn = network.sources.find(source => source.id === "DC-RETURN");
+  operating.returnHeatSourceCostKW = Number(dcReturn?.dispatchedKW ?? 0) + Number(dcReturn?.flexibleSinkKW ?? 0);
+  operating.returnNetwork = network;
+  return operating.flexibleSinks;
+}
+
 function heatPumpStep(sourceHeatKW, inletTemp, outletTargetTemp, cop) {
   const liftActive = Number(outletTargetTemp) > Number(inletTemp);
   const electricalPowerKW = liftActive ? sourceHeatKW / (Number(cop) - 1) : 0;
@@ -348,6 +435,20 @@ function validateNetwork(input) {
     if (Number(industrial.availabilityPercent) < 0 || Number(industrial.availabilityPercent) > 100) errors.push("Industrial waste-heat availability must be between 0 and 100%.");
     if (Number(industrial.lossToHMP) < 0) errors.push("Industrial source-to-HMP temperature loss cannot be negative.");
   }
+  const wastewater = input.wastewaterHeat;
+  if (wastewater) {
+    for (const key of ["sourceTempC", "availableThermalKW", "availabilityPercent", "lossToHMP"])
+      if (wastewater[key] === "" || !Number.isFinite(Number(wastewater[key]))) errors.push(`wastewaterHeat.${key} must be a number.`);
+    if (Number(wastewater.availableThermalKW) < 0) errors.push("Wastewater heat capacity cannot be negative.");
+    if (Number(wastewater.availabilityPercent) < 0 || Number(wastewater.availabilityPercent) > 100) errors.push("Wastewater heat availability must be between 0 and 100%.");
+    if (Number(wastewater.lossToHMP) < 0) errors.push("Wastewater source-to-HMP temperature loss cannot be negative.");
+  }
+  for (const [path, value] of [["flexibleSinks.greenhouse.maxDemandKW", input.flexibleSinks?.greenhouse?.maxDemandKW],
+    ["flexibleSinks.greenhouse.minimumTemperatureC", input.flexibleSinks?.greenhouse?.minimumTemperatureC],
+    ["flexibleSinks.absorptionCooling.maxHeatInputKW", input.flexibleSinks?.absorptionCooling?.maxHeatInputKW],
+    ["flexibleSinks.absorptionCooling.minimumDrivingTempC", input.flexibleSinks?.absorptionCooling?.minimumDrivingTempC],
+    ["flexibleSinks.absorptionCooling.thermalCOP", input.flexibleSinks?.absorptionCooling?.thermalCOP]])
+    if (value != null && (value === "" || !Number.isFinite(Number(value)))) errors.push(`${path} must be a number.`);
   if (input.sourceTemperatureStrategy === "blended") {
     for (const [key, label] of [["normalPlantSupplyTemp", "Normal plant supply temperature"], ["maxRampedPlantSupplyTemp", "Maximum ramped plant supply temperature"], ["plantRampCostPerMWhPerK", "Plant temperature ramp cost"]])
       if (input[key] === "" || !Number.isFinite(Number(input[key]))) errors.push(`${label} must be a number.`);
@@ -403,15 +504,19 @@ function simulate(input, installedBoosters, sourceOverride = null) {
   const dataCenterModes = calculateDataCenterModes(input.wasteHeat, input.hmpTargetTemp, totalDemandKW, input.wasteHeat.lossToHMP);
   const wasteHeat = sourceOverride?.wasteHeat ?? dataCenterModes[input.wasteHeat.mode];
   const industrialWasteHeat = calculateIndustrialWasteHeat(input.industrialWasteHeat, input.hmpTargetTemp);
-  // Deterministic supply dispatch: selected eligible Data Center heat, Industrial Waste Heat, then central residual.
+  const wastewaterHeat = calculateWastewaterHeat(input.wastewaterHeat ?? { enabled: false }, input.hmpTargetTemp);
+  // Deterministic supply dispatch: Data Center, Industrial, Wastewater, then central residual.
   const dataCenterHeatUsedKW = wasteHeat.injectionEligible ? Math.min(totalDemandKW, wasteHeat.injectedKW) : 0;
   industrialWasteHeat.injectedKW = Math.min(Math.max(0, totalDemandKW - dataCenterHeatUsedKW), industrialWasteHeat.usableKW);
   if (industrialWasteHeat.injectedKW > 0) industrialWasteHeat.status = "INJECTING";
+  wastewaterHeat.injectedKW = Math.min(Math.max(0, totalDemandKW - dataCenterHeatUsedKW - industrialWasteHeat.injectedKW), wastewaterHeat.usableKW);
+  if (wastewaterHeat.injectedKW > 0) wastewaterHeat.status = "INJECTING";
   const plantCanContribute = centralPlant.availableKW > 0;
   const sourceTemperatures = [];
   if (plantCanContribute) sourceTemperatures.push(centralPlant.contributionTemp);
   if (wasteHeat.mode !== "raw-return" && wasteHeat.availableKW > 0 && wasteHeat.contributionTemp != null) sourceTemperatures.push(wasteHeat.contributionTemp);
   if (industrialWasteHeat.availableKW > 0) sourceTemperatures.push(industrialWasteHeat.contributionTemp);
+  if (input.wastewaterHeat && input.wastewaterHeat.enabled !== false && wastewaterHeat.availableKW > 0) sourceTemperatures.push(wastewaterHeat.contributionTemp);
   const highestAvailableSourceTemp = sourceTemperatures.length ? Math.max(...sourceTemperatures) : null;
   // This is temperature capability at the HMP setpoint, not a mixed or achieved network temperature.
   // Mixing cannot be calculated without adequate flow and return-temperature data.
@@ -420,14 +525,14 @@ function simulate(input, installedBoosters, sourceOverride = null) {
   const networkDeltaK = Number(input.hmpTargetTemp) - networkReturnTemp;
   const referenceNetworkDeltaK = input.referenceNetworkDeltaK == null || input.referenceNetworkDeltaK === "" ? null : Number(input.referenceNetworkDeltaK);
   const wasteHeatUsedKW = dataCenterHeatUsedKW;
-  const totalWasteHeatUsedKW = dataCenterHeatUsedKW + industrialWasteHeat.injectedKW;
+  const totalWasteHeatUsedKW = dataCenterHeatUsedKW + industrialWasteHeat.injectedKW + wastewaterHeat.injectedKW;
   const injectedFraction = wasteHeat.injectionEligible && wasteHeat.deliveredHeatKW > 0 ? wasteHeat.injectedKW / wasteHeat.deliveredHeatKW : 0;
   const dataCenterSourceHeatUsedKW = wasteHeat.sourceHeatKW * injectedFraction;
   const dataCenterElectricPowerKW = wasteHeat.electricalPowerKW * injectedFraction;
   const centralProductionKW = Math.max(0, totalDemandKW - totalWasteHeatUsedKW);
   const centralPlantUsedKW = Math.min(centralProductionKW, centralPlant.usableKW);
   const centralPlantShortfallKW = Math.max(0, centralProductionKW - centralPlantUsedKW);
-  const hmpPowerAvailableKW = wasteHeat.usableKW + industrialWasteHeat.usableKW + centralPlant.usableKW;
+  const hmpPowerAvailableKW = wasteHeat.usableKW + industrialWasteHeat.usableKW + wastewaterHeat.usableKW + centralPlant.usableKW;
   const hmpPowerShortfallKW = Math.max(0, totalDemandKW - hmpPowerAvailableKW);
   const hmpTemperatureReachable = hmpTemperatureCapabilityTemp != null && hmpTemperatureCapabilityTemp >= Number(input.hmpTargetTemp);
   const networkOperatingPointSupported = hmpTemperatureReachable && hmpPowerShortfallKW <= 1e-9;
@@ -458,7 +563,8 @@ function simulate(input, installedBoosters, sourceOverride = null) {
     closeCount: branches.filter(branch => branch.status === "close").length,
     centralPlant, centralPlantUsedKW, centralPlantShortfallKW,
     wasteHeat, dataCenterModes, wasteHeatUsedKW, dataCenterHeatUsedKW, dataCenterSourceHeatUsedKW, dataCenterElectricPowerKW,
-    industrialWasteHeat, industrialWasteHeatUsedKW: industrialWasteHeat.injectedKW, totalWasteHeatUsedKW, centralProductionKW,
+    industrialWasteHeat, industrialWasteHeatUsedKW: industrialWasteHeat.injectedKW, wastewaterHeat,
+    wastewaterHeatUsedKW: wastewaterHeat.injectedKW, totalWasteHeatUsedKW, centralProductionKW,
     sourceBlending: sourceOverride?.diagnostics ?? null,
     plantRampPenaltyPerHour: sourceOverride?.diagnostics?.rampPenaltyPerHour ?? 0,
     booster: { branchId: input.booster.branchId, installedCount: installedBoosters.length,
@@ -468,15 +574,16 @@ function simulate(input, installedBoosters, sourceOverride = null) {
   };
 }
 
-function estimatedSourceFlows(plantKW, plantAtHMP, dcKW, dcAtHMP, industrialKW, industrialAtHMP, returnTemp) {
+function estimatedSourceFlows(plantKW, plantAtHMP, dcKW, dcAtHMP, industrialKW, industrialAtHMP, wastewaterKW, wastewaterAtHMP, returnTemp) {
   const plantFlowM3h = plantKW === 0 ? 0 : plantKW / (KW_PER_M3H_K * (plantAtHMP - returnTemp));
   const dataCenterFlowM3h = dcKW === 0 ? 0 : dcKW / (KW_PER_M3H_K * (dcAtHMP - returnTemp));
   const industrialFlowM3h = industrialKW === 0 ? 0 : industrialKW / (KW_PER_M3H_K * (industrialAtHMP - returnTemp));
-  const flows = [plantFlowM3h, dataCenterFlowM3h, industrialFlowM3h];
+  const wastewaterFlowM3h = wastewaterKW === 0 ? 0 : wastewaterKW / (KW_PER_M3H_K * (wastewaterAtHMP - returnTemp));
+  const flows = [plantFlowM3h, dataCenterFlowM3h, industrialFlowM3h, wastewaterFlowM3h];
   if (!flows.every(Number.isFinite) || flows.some(flow => flow < 0) || flows.reduce((sum, flow) => sum + flow, 0) <= 0) return null;
   const totalFlow = flows.reduce((sum, flow) => sum + flow, 0);
-  return { plantFlowM3h, dataCenterFlowM3h, industrialFlowM3h,
-    mixedSupplyTemp: (plantFlowM3h * plantAtHMP + dataCenterFlowM3h * dcAtHMP + industrialFlowM3h * industrialAtHMP) / totalFlow };
+  return { plantFlowM3h, dataCenterFlowM3h, industrialFlowM3h, wastewaterFlowM3h,
+    mixedSupplyTemp: (plantFlowM3h * plantAtHMP + dataCenterFlowM3h * dcAtHMP + industrialFlowM3h * industrialAtHMP + wastewaterFlowM3h * wastewaterAtHMP) / totalFlow };
 }
 
 export function calculateBlendedSourceState(input, strictState, installedBoosters, prices = {}) {
@@ -485,10 +592,12 @@ export function calculateBlendedSourceState(input, strictState, installedBooster
   const loss = Number(input.centralPlant.lossToHMP), target = Number(input.hmpTargetTemp), returnTemp = Number(input.networkReturnTemp ?? 40);
   const dcAtHMP = dcPath.contributionTemp;
   const industrial = calculateIndustrialWasteHeat(input.industrialWasteHeat, target);
+  const wastewater = calculateWastewaterHeat(input.wastewaterHeat ?? { enabled: false }, target);
   const maxDataCenterKW = Math.min(demandKW, dcPath.deliveredHeatKW);
   const strictCost = calculateOperatingCost({ centralPlantKW: strictState.centralPlantUsedKW,
     wasteHeatKW: strictState.dataCenterSourceHeatUsedKW,
     industrialWasteHeatKW: strictState.industrialWasteHeatUsedKW,
+    wastewaterHeatKW: strictState.wastewaterHeatUsedKW,
     electricPowerKW: strictState.dataCenterElectricPowerKW + strictState.booster.electricalPowerKW }, prices);
   const strictFeasible = strictState.networkOperatingPointSupported;
   const baseDiagnostics = { strictFeasible, blendedFeasible: false, strictCostPerHour: strictCost,
@@ -504,10 +613,11 @@ export function calculateBlendedSourceState(input, strictState, installedBooster
   for (let step = 0; step <= 100; step++) {
     const dataCenterKW = maxDataCenterKW * step / 100;
     const industrialKW = industrial.temperatureEligible ? Math.min(industrial.availableKW, Math.max(0, demandKW - dataCenterKW)) : 0;
-    const plantKW = Math.max(0, demandKW - dataCenterKW - industrialKW);
+    const wastewaterKW = wastewater.temperatureEligible ? Math.min(wastewater.availableKW, Math.max(0, demandKW - dataCenterKW - industrialKW)) : 0;
+    const plantKW = Math.max(0, demandKW - dataCenterKW - industrialKW - wastewaterKW);
     if (plantKW > strictState.centralPlant.availableKW + 1e-9) { sawCapacityShortfall = true; continue; }
     const mixAt = supply => estimatedSourceFlows(plantKW, supply - loss, dataCenterKW, dcAtHMP,
-      industrialKW, industrial.contributionTemp, returnTemp);
+      industrialKW, industrial.contributionTemp, wastewaterKW, wastewater.contributionTemp, returnTemp);
     const maximumMix = mixAt(maximum);
     if (!maximumMix || maximumMix.mixedSupplyTemp < target) { sawRampLimit = true; continue; }
     let requiredPlantSupplyTemp = normal;
@@ -535,9 +645,10 @@ export function calculateBlendedSourceState(input, strictState, installedBooster
     const costPerHour = calculateOperatingCost({ centralPlantKW: candidate.centralPlantUsedKW,
       wasteHeatKW: candidate.dataCenterSourceHeatUsedKW,
       industrialWasteHeatKW: candidate.industrialWasteHeatUsedKW,
+      wastewaterHeatKW: candidate.wastewaterHeatUsedKW,
       electricPowerKW: candidate.dataCenterElectricPowerKW + candidate.booster.electricalPowerKW }, prices) + rampPenaltyPerHour;
     if (!best || costPerHour < best.costPerHour) best = { candidate, centralPlant, wasteHeat, mix,
-      dataCenterKW, plantKW, requiredPlantSupplyTemp, rampK, rampPenaltyPerHour, costPerHour };
+      dataCenterKW, industrialKW, wastewaterKW, plantKW, requiredPlantSupplyTemp, rampK, rampPenaltyPerHour, costPerHour };
   }
 
   const blendedFeasible = best != null;
@@ -562,6 +673,7 @@ export function calculateBlendedSourceState(input, strictState, installedBooster
       requiredPlantSupplyTemp: best.requiredPlantSupplyTemp, normalPlantSupplyTemp: normal,
       plantRampK: best.rampK, rampLimitSupplyTemp: maximum, rampPenaltyPerHour: best.rampPenaltyPerHour } : {}) };
   return { dispatch: chooseBlended ? { centralPlant: best.centralPlant, wasteHeat: best.wasteHeat,
+    wastewaterHeatUsedKW: best.wastewaterKW,
     mixedSupplyTemp: best.mix.mixedSupplyTemp, diagnostics } : null, diagnostics };
 }
 
@@ -594,7 +706,11 @@ export function calculateNetworkState(input, hmpTargetTemp = input.hmpTargetTemp
     without = blendWithout.dispatch ? simulate(stateInput, [], blendWithout.dispatch) : { ...without, sourceBlending: blendWithout.diagnostics };
     withBooster = blendWith.dispatch ? simulate(stateInput, stateInput.gridBoosters, blendWith.dispatch) : { ...withBooster, sourceBlending: blendWith.diagnostics };
   }
-  return { without, withBooster, returnNetwork: calculateReturnNetworkState(stateInput.returnNetwork), comparison: {
+  const returnNetwork = calculateReturnNetworkState(stateInput.returnNetwork);
+  const flexibleSinks = stateInput.flexibleSinks ?? { greenhouse: { enabled: false }, absorptionCooling: { enabled: false } };
+  dispatchFlexibleHeatSinks(without, flexibleSinks, returnNetwork, prices);
+  dispatchFlexibleHeatSinks(withBooster, flexibleSinks, returnNetwork, prices);
+  return { without, withBooster, returnNetwork: withBooster.returnNetwork, comparison: {
     criticalBefore: without.criticalCount,
     criticalAfter: withBooster.criticalAfterCount,
     marginBefore: Object.fromEntries(without.branches.map(branch => [branch.id, branch.margin])),
@@ -610,11 +726,12 @@ export function simulateNetwork(input, prices = {}) {
   return calculateNetworkState(input, input.hmpTargetTemp, prices);
 }
 
-export function calculateOperatingCost({ centralPlantKW, wasteHeatKW, industrialWasteHeatKW = 0, electricPowerKW }, prices = {}) {
-  return Number(centralPlantKW ?? 0) * Number(prices.centralHeatCostPerMWh ?? 40) / 1000
-    + Number(wasteHeatKW ?? 0) * Number(prices.wasteHeatCostPerMWh ?? 5) / 1000
-    + Number(industrialWasteHeatKW ?? 0) * Number(prices.industrialWasteHeatCostPerMWh ?? 5) / 1000
-    + Number(electricPowerKW ?? 0) * Number(prices.electricityPricePerMWh ?? 50) / 1000;
+export function calculateOperatingCost({ centralPlantKW, wasteHeatKW, industrialWasteHeatKW = 0, wastewaterHeatKW = 0, electricPowerKW }, prices = {}) {
+  return Number(centralPlantKW ?? 0) * Number(prices.centralHeatCostPerMWh ?? 76) / 1000
+    + Number(wasteHeatKW ?? 0) * Number(prices.wasteHeatCostPerMWh ?? 10) / 1000
+    + Number(industrialWasteHeatKW ?? 0) * Number(prices.industrialWasteHeatCostPerMWh ?? 10) / 1000
+    + Number(wastewaterHeatKW ?? 0) * Number(prices.wastewaterHeatCostPerMWh ?? 25) / 1000
+    + Number(electricPowerKW ?? 0) * Number(prices.electricityPricePerMWh ?? 70) / 1000;
 }
 
 export function summarizeNetworkFlexState(state, input, prices = {}) {
@@ -626,12 +743,23 @@ export function summarizeNetworkFlexState(state, input, prices = {}) {
     return sum + branch.flowM3h * KW_PER_M3H_K * Math.max(0, -branch.finalMargin);
   }, 0);
   const additionalRequiredBoosterElectricKW = additionalRequiredBoosterThermalKW / Number(input.booster.cop);
-  const dataCenterElectricKW = operating.dataCenterElectricPowerKW;
+  const flexibleDCFraction = operating.wasteHeat.deliveredHeatKW > 0
+    ? Number(operating.wasteHeat.flexibleDeliveredHeatKW ?? 0) / operating.wasteHeat.deliveredHeatKW : 0;
+  const flexibleDCElectricKW = Number(operating.wasteHeat.electricalPowerKW ?? 0) * flexibleDCFraction;
+  const dataCenterElectricKW = operating.dataCenterElectricPowerKW + flexibleDCElectricKW;
   const totalSystemElectricKW = dataCenterElectricKW + operating.booster.electricalPowerKW;
   const operatingCostPerHour = calculateOperatingCost({ centralPlantKW: operating.centralPlantUsedKW,
-    wasteHeatKW: operating.dataCenterSourceHeatUsedKW, industrialWasteHeatKW: operating.industrialWasteHeatUsedKW,
+    wasteHeatKW: operating.dataCenterSourceHeatUsedKW + Number(operating.returnHeatSourceCostKW ?? 0)
+      + Number(operating.wasteHeat.sourceHeatKW ?? 0) * flexibleDCFraction,
+    industrialWasteHeatKW: operating.industrialWasteHeatUsedKW + Number(operating.industrialWasteHeat.flexibleUsedKW ?? 0),
+    wastewaterHeatKW: operating.wastewaterHeatUsedKW + Number(operating.wastewaterHeat.flexibleUsedKW ?? 0),
     electricPowerKW: totalSystemElectricKW }, prices);
-  const totalOperatingCostPerHour = operatingCostPerHour + Number(operating.plantRampPenaltyPerHour ?? 0);
+  const grossOperatingCostPerHour = operatingCostPerHour + Number(operating.plantRampPenaltyPerHour ?? 0);
+  const coolingRevenuePerHour = Number(operating.flexibleSinks?.absorptionCooling.coolingRevenuePerHour ?? 0);
+  const totalOperatingCostPerHour = grossOperatingCostPerHour - coolingRevenuePerHour;
+  const flexibleSupplyHeatKW = Number(operating.flexibleSinks?.greenhouse.supplyHeatKW ?? 0)
+    + Number(operating.flexibleSinks?.absorptionCooling.heatInputKW ?? 0);
+  const flexibleBySource = operating.flexibleSinks?.supplyBySourceKW ?? {};
   return {
     hmpTargetTemp: operating.hmpTargetTemp,
     hmpTemperatureCapabilityTemp: operating.hmpTemperatureCapabilityTemp,
@@ -651,8 +779,21 @@ export function summarizeNetworkFlexState(state, input, prices = {}) {
     activeBoosterCount: operating.afterBranches.flatMap(branch => branch.gridBoosters).filter(booster => booster.actualLiftK > 0).length,
     usableDataCenterHeatKW: operating.wasteHeatUsedKW,
     dataCenterHeatUsedKW: operating.dataCenterHeatUsedKW,
+    dataCenterFlexibleHeatUsedKW: Number(flexibleBySource["DATA-CENTER-SUPPLY"] ?? 0),
     industrialWasteHeatUsedKW: operating.industrialWasteHeatUsedKW,
-    usableWasteHeatKW: operating.totalWasteHeatUsedKW,
+    industrialFlexibleHeatUsedKW: Number(flexibleBySource.INDUSTRIAL ?? 0),
+    wastewaterHeatUsedKW: operating.wastewaterHeatUsedKW,
+    wastewaterFlexibleHeatUsedKW: Number(flexibleBySource.WASTEWATER ?? 0),
+    wastewaterHeatAvailableKW: operating.wastewaterHeat.availableKW,
+    wastewaterHeatContributionTempC: operating.wastewaterHeat.contributionTemp,
+    wastewaterHeatTemperatureEligible: operating.wastewaterHeat.temperatureEligible,
+    flexibleSinks: operating.flexibleSinks,
+    surplusHeatKW: operating.flexibleSinks?.surplusHeatKW ?? 0,
+    flexibleSinkHeatKW: operating.flexibleSinks?.flexibleSinkHeatKW ?? 0,
+    curtailedHeatKW: operating.flexibleSinks?.curtailedHeatKW ?? 0,
+    coolingOutputKW: operating.flexibleSinks?.absorptionCooling.coolingOutputKW ?? 0,
+    coolingRevenuePerHour: operating.flexibleSinks?.absorptionCooling.coolingRevenuePerHour ?? 0,
+    usableWasteHeatKW: operating.totalWasteHeatUsedKW + flexibleSupplyHeatKW,
     selectedDataCenterMode: operating.wasteHeat.mode,
     selectedDataCenterPathEligible: operating.wasteHeat.strictTemperatureEligible ?? operating.wasteHeat.injectionEligible,
     selectedDataCenterPathUsed: operating.wasteHeat.usedInSelectedDispatch ?? operating.wasteHeat.injectedKW > 0,
@@ -671,6 +812,9 @@ export function summarizeNetworkFlexState(state, input, prices = {}) {
     thermalShortfallKW: operating.hmpPowerShortfallKW,
     totalSystemElectricKW,
     operatingCostPerHour: totalOperatingCostPerHour,
+    grossOperatingCostPerHour,
+    netOperatingCostPerHour: totalOperatingCostPerHour,
+    coolingRevenuePerHour,
     plantRampPenaltyPerHour: Number(operating.plantRampPenaltyPerHour ?? 0)
   };
 }
