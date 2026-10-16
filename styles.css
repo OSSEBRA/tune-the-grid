@@ -1095,6 +1095,7 @@ body[data-mode="demo"] .supply-source-stack{grid-template-rows:minmax(0,1fr);ali
 /* Keep a real, responsive clearance between every card edge and horizontal feeder. */
 .source-network .dc-arm .source-pipe,.source-network .industrial-arm .source-pipe,
 .full-source-network .dc-arm .source-pipe,.full-source-network .industrial-arm .source-pipe{right:calc(100% - var(--feeder-source-left) + var(--source-feeder-gap))}
+.source-network .dc-pipe span,.full-source-network .dc-pipe span{left:calc(50% + var(--source-feeder-gap))}
 body[data-mode="demo"] #supply-network-view .source-network{grid-template-columns:minmax(0,1fr) minmax(130px,160px) minmax(0,1fr);min-height:240px}
 body[data-mode="demo"] #supply-network-view .left-supply-source-stack .plant-node,
 body[data-mode="demo"] #supply-network-view .supply-source-stack .dc-node{width:min(78%,170px);min-height:142px}
