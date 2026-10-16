@@ -1,4 +1,4 @@
-import { simulateNetwork, calculateTemperatureFlexSweep, summarizeNetworkFlexState, calculateOperatingCost, lowestSupportedPoint, isReturnSourceAvailableToConsumer, calculatePip3HeatSplit, findPrimaryTemperatureBottleneck, MAX_PIP3_BRANCHES } from "./network-model.js?v=20261014-1";
+import { simulateNetwork, calculateTemperatureFlexSweep, summarizeNetworkFlexState, calculateOperatingCost, lowestSupportedPoint, isReturnSourceAvailableToConsumer, calculatePip3HeatSplit, MAX_PIP3_BRANCHES } from "./network-model.js?v=20261014-1";
 import { analyzeSystemOpportunity, calculateOpportunityIntervention, calculateMarginalTemperature, calculateSourceTemperatureIntervention, clearScenarioSlot, compareScenarioSnapshots, restoreScenarioSnapshot, saveScenarioSlot, selectCasualSystemGuidance } from "./network-insights.js?v=20261014-2";
 import { buildSensitivityValues, calculateKeySensitivities, calculateSensitivitySweep, createSensitivitySpec, summarizeSensitivitySweep } from "./network-sensitivity.js?v=20261014-1";
 import { createAnnualProfile, createOperatingBin, duplicateAnnualProfile, updateOperatingBin, calculateAnnualProfile, compareAnnualProfiles, calculateBusinessCase } from "./annual-analysis.js?v=20261014-1";
@@ -67,7 +67,13 @@ let selectedPip3Branch = "D";
 let supermarketTopologySelected = false;
 let bottleneckFound = false;
 let demoConstraintAddressed = false;
+let identifiedCriticalBranches = new Set();
+let guidedDemoBoosterIds = new Set();
 let demoComparisonBaseline = false;
+let guidedDemoAdvanceTimer = null;
+let guidedDemoLayer = "story";
+let guidedStoryStep = 0;
+let guidedStoryCriticalBranches = [];
 let latestNetworkState = null;
 let scenarioSnapshots = { baseline: null, optionA: null, optionB: null };
 let sensitivityResult = null;
@@ -451,27 +457,41 @@ function selectNetworkBranch(branch) {
   selectedNetworkBranch = branch.id;
   if (document.body.dataset.mode === "casual" && selectedBoosterId) moveBoosterToBranch(selectedBoosterId, branch.id);
   if (["D", "E", "F"].includes(branch.id)) selectedPip3Branch = branch.id;
-  const bottleneck = findPrimaryTemperatureBottleneck(latestNetworkState?.withBooster.afterBranches ?? []);
   if (guidedDemoStep === 1) {
-    if (!bottleneck) $("demo-branch-feedback").textContent = translate("interaction.no_constraint");
-    else if (branch.id === bottleneck.id) {
-      bottleneckFound = true;
-      $("demo-branch-feedback").textContent = translate("interaction.constraint_found", { branch: bottleneck.id, deficit: fmt(-bottleneck.finalMargin) });
-    } else $("demo-branch-feedback").textContent = translate("interaction.try_another");
+    cancelGuidedDemoAutoAdvance();
+    const required = guidedDemoRequiredBranches();
+    const critical = required.find(candidate => candidate.id === branch.id);
+    if (!required.length) { bottleneckFound = false; $("demo-branch-feedback").textContent = translate("interaction.no_constraint"); }
+    else if (critical) {
+      identifiedCriticalBranches.add(branch.id);
+      bottleneckFound = identifiedCriticalBranches.size === required.length;
+      $("demo-branch-feedback").textContent = `${critical.id} identified · IDENTIFIED ${identifiedCriticalBranches.size} / ${required.length} CRITICAL BRANCHES`;
+    } else { bottleneckFound = false; $("demo-branch-feedback").textContent = translate("interaction.try_another"); }
   }
   if (guidedDemoStep === 2) $("guided-demo-activate").disabled = !selectedNetworkBranch;
   recalculate();
+  if (guidedDemoStep === 1) updateGuidedDemoProgress();
 }
 
 function renderBranches(result) {
   const hosts = { top: $("network-branches-top"), bottom: $("network-branches-bottom") };
   Object.values(hosts).forEach(host => host.replaceChildren());
+  const guidedTechnical = document.body.dataset.mode === "demo" && guidedDemoLayer === "technical";
+  const guidedRequiredIds = guidedTechnical && guidedDemoStep >= 1 && guidedDemoStep <= 2
+    ? new Set(guidedDemoRequiredBranches().map(item => item.id)) : new Set();
+  const guidedPlacedIds = guidedTechnical && guidedDemoStep === 2
+    ? guidedDemoPlacedBranches([...guidedRequiredIds].map(id => ({ id }))) : new Set();
+  const guidedStoryBranches = new Set(document.body.dataset.mode === "demo" && guidedDemoLayer === "story" && guidedStoryStep > 0
+    ? guidedStoryCriticalBranches : []);
   for (const branch of result.afterBranches) {
     const [status, label] = classify(branch);
     const selected = selectedNetworkBranch === branch.id || branch.gridBoosters.length > 0;
     const casual = document.body.dataset.mode === "casual";
+    const guidedRequired = guidedRequiredIds.has(branch.id);
+    const guidedIdentified = guidedTechnical && guidedDemoStep >= 1 && guidedDemoStep <= 2 && identifiedCriticalBranches.has(branch.id);
+    const guidedPlaced = guidedTechnical && guidedDemoStep === 2 && guidedPlacedIds.has(branch.id);
     const row = document.createElement("article");
-    row.className = `network-branch-row ${status}${selected ? " selected" : ""}${!branch.feasibleWithoutBooster ? " needs-booster" : ""}`;
+    row.className = `network-branch-row ${status}${selected ? " selected" : ""}${!branch.feasibleWithoutBooster ? " needs-booster" : ""}${guidedIdentified ? " guided-identified" : ""}${guidedRequired ? " guided-required" : ""}`;
     row.dataset.branch = branch.id;
     row.tabIndex = 0; row.setAttribute("role", "button"); row.setAttribute("aria-pressed", String(selectedNetworkBranch === branch.id));
     const showWhy = document.body.dataset.mode === "demo";
@@ -483,11 +503,14 @@ function renderBranches(result) {
       : branch.status === "unavailable" || branch.status === "below" ? translate("casual.too_cold")
         : branch.status === "close" ? translate("casual.close") : translate("casual.ok");
     const casualSummary = casual ? `<div class="casual-branch-summary"><b class="casual-branch-state">${casualStatus}</b>${branch.boosterActive ? `<span>${escapeHtml(translate("casual.boosted_to", { temperature: fmtTemp(branch.finalSupplyTemp) }))}</span>` : branch.margin < 0 ? `<span>${escapeHtml(translate("casual.needs_lift", { lift: fmt(-branch.margin) }))}</span>` : ""}${!branch.feasibleWithoutBooster && !branch.gridBoosters.length ? `<button type="button" class="casual-boost-action" data-casual-boost="${branch.id}">${escapeHtml(translate("casual.boost_branch"))}</button>` : ""}</div>` : "";
+    const guidedStoryCustomerCaption = guidedStoryBranches.has(branch.id) ? `<small class="guided-story-customer-caption">TEMPERATURE-CRITICAL CUSTOMER</small>` : "";
+    const guidedAction = guidedTechnical && guidedDemoStep === 2 && guidedRequired
+      ? `<div class="guided-demo-branch-action">${guidedPlaced ? `<span class="guided-demo-branch-placed">✓ GRIDBOOSTER PLACED</span>` : `<button type="button" data-guided-demo-boost="${branch.id}">+ ADD GRIDBOOSTER</button>`}</div>` : "";
     row.innerHTML = `<div class="branch-pipe-connector"><span>${branch.id <= "C" ? "▲" : "▼"}</span></div><div class="branch-route-card">
-      <div class="branch-route-head"><b class="branch-flag">${branch.id}</b><strong>${casual ? escapeHtml(translate("casual.branch", { branch: branch.id })) : `${escapeHtml(branch.name).toUpperCase()} · CUSTOMER LOAD`}</strong><span class="branch-status">${casual ? casualStatus : label}</span>${showWhy ? `<button type="button" class="network-why-button" data-why-branch="${branch.id}" data-i18n="interaction.why">WHY?</button>` : ""}</div>
+      <div class="branch-route-head"><b class="branch-flag">${branch.id}</b><strong>${casual ? escapeHtml(translate("casual.branch", { branch: branch.id })) : `${escapeHtml(branch.name).toUpperCase()} · CUSTOMER LOAD`}</strong>${guidedStoryCustomerCaption}<span class="branch-status">${casual ? casualStatus : label}</span>${showWhy ? `<button type="button" class="network-why-button" data-why-branch="${branch.id}" data-i18n="interaction.why">WHY?</button>` : ""}</div>
       ${casualSummary}<div class="branch-route-values"><b class="branch-temp">TEMP CAPABILITY ${fmt(branch.availableSupplyTemp)} °C</b><span>MIN ${fmt(branch.minimumSupplyTemp)} °C</span><span>LOAD ${fmt(branch.demandKW / 1000, 2)} MW</span><span>FLOW ${fmt(branch.flowM3h)} m³/h</span><span>HMP → BRANCH ΔT LOSS −${fmt(branch.lossToBranch)} K</span><span>CAPABILITY MARGIN ${fmt(branch.margin)} K</span><span>WITHOUT BOOSTER ${branch.feasibleWithoutBooster ? "✓ TEMP CAPABLE" : "! BELOW MINIMUM"}</span><span>${duty}</span></div>
       <div class="branch-drop-hint">DROP GRIDBOOSTER HERE · BASE CAPABILITY ${fmt(branch.availableSupplyTemp)} °C → BOOSTED CAPABILITY ${fmt(branch.finalSupplyTemp)} °C · MARGIN ${fmt(branch.finalMargin)} K</div>
-    </div>${boosters}`;
+    </div>${guidedAction}${boosters}`;
     row.addEventListener("dragover", event => {
       if (!isBoosterDrag(event)) return;
       event.preventDefault();
@@ -519,6 +542,10 @@ function renderBranches(result) {
     }));
     row.querySelectorAll("[data-casual-remove]").forEach(button => button.addEventListener("click", event => { event.stopPropagation?.(); removeBooster(button.dataset.casualRemove); }));
     row.querySelectorAll("[data-casual-boost]").forEach(button => button.addEventListener("click", event => { event.stopPropagation?.(); createBooster({ branchId: button.dataset.casualBoost, mode: "target" }); }));
+    row.querySelectorAll("[data-guided-demo-boost]").forEach(button => button.addEventListener("click", event => {
+      event.stopPropagation?.();
+      addGuidedDemoBoosterToBranch(button.dataset.guidedDemoBoost);
+    }));
     hosts[branch.id <= "C" ? "top" : "bottom"].append(row);
   }
 }
@@ -764,19 +791,134 @@ function renderComparison(result, comparison) {
 }
 
 const guidedDemoSteps = [
-  { title: "THE HEAT IS ALREADY THERE.", copy: "An available waste-heat source sits below the network's current HMP temperature requirement. Available energy is not necessarily usable energy." },
-  { title: "ONE CRITICAL BRANCH CAN LIMIT THE ENTIRE NETWORK.", copy: "Lowering the central temperature makes the source eligible in this example, while Branch A falls below its minimum supply requirement. The model keeps every other branch visible." },
-  { title: "BOOST LOCALLY. NOT EVERYWHERE.", copy: "Gridbooster lifts the selected branch to its required temperature. Activate it to see the network calculation update." },
-  { title: "UNLOCK PREVIOUSLY INACCESSIBLE WASTE HEAT.", copy: "Compare the same demand, source, weather and plant assumptions. Only the HMP target and local booster configuration differ." },
-  { title: "THE VALUE IS IN THE SYSTEM.", copy: "Compare avoided central production cost and net operating cost at this modeled operating point. Annual savings and payback need operating hours and investment data." }
+  { title: "THE HEAT IS ALREADY THERE.", copy: "An available waste-heat source sits below the network's current temperature requirement. Available energy is not necessarily usable energy.", action: "Lower the network temperature until waste heat can enter the system.", watchFor: "The waste-heat source becomes able to feed the network.", result: "Watch the source and network as you lower the temperature." },
+  { title: "TEMPERATURE-CRITICAL BRANCHES CAN LIMIT THE NETWORK.", copy: "Lowering the central temperature makes the source eligible in this example. Every branch below its minimum temperature needs attention.", action: "If needed, lower HMP to 80 °C, then identify every red branch in the live network.", watchFor: "Progress shows how many temperature-critical branches you have identified.", result: "Select each branch with a temperature deficit." },
+  { title: "BOOST LOCALLY. NOT EVERYWHERE.", copy: "Gridbooster lifts each selected branch that needs a local temperature increase. Activate one on every temperature-critical branch.", action: "On each red branch, choose + ADD GRIDBOOSTER.", watchFor: "Each installed booster appears on its branch; the count updates here.", result: "Install a GridBooster on every branch that needs local lift." },
+  { title: "DATA-CENTER OPTIONS", copy: "The source can reach the current network target through some delivery routes, while others may not be warm enough. The live model checks each route against the current target.", action: "Review the calculated options, then continue. The working source mode stays active.", watchFor: "A green option supports the current network target; unavailable routes stay marked infeasible.", result: "No mode change is needed to continue. The comparison uses the current source and HMP temperatures." },
+  { title: "THE VALUE IS IN THE SYSTEM.", copy: "Compare avoided central production cost and net operating cost at this modeled operating point. Annual savings and payback need operating hours and investment data.", action: "Compare BASELINE and CURRENT in the results table below.", watchFor: "More waste heat can reduce central production and modeled operating cost.", result: "These are calculated values for this operating point, not annual savings." }
 ];
+const guidedDemoAdvanceDelay = 1100;
 let guidedDemoStep = 0;
 const guidedDemoBooster = { id: "GB-DEMO", branchId: "", mode: "target", targetTemp: 85, liftK: 0, cop: 3, maxThermalKW: 900 };
+let guidedDemoRequiredCacheKey = "";
+let guidedDemoRequiredCache = [];
+
+function cancelGuidedDemoAutoAdvance() {
+  if (guidedDemoAdvanceTimer !== null) clearTimeout(guidedDemoAdvanceTimer);
+  guidedDemoAdvanceTimer = null;
+}
+
+function scheduleGuidedDemoAutoAdvance(step, success) {
+  cancelGuidedDemoAutoAdvance();
+  guidedDemoAdvanceTimer = setTimeout(() => {
+    guidedDemoAdvanceTimer = null;
+    if (guidedDemoStep === step && success()) applyGuidedDemoStep(step + 1);
+  }, guidedDemoAdvanceDelay);
+}
 
 function guidedDemoInputs(input, hmpTargetTemp, boosters) {
   return { ...input, industrialWasteHeat: { ...input.industrialWasteHeat, availableThermalKW: 0 },
     wastewaterHeat: { ...input.wastewaterHeat, enabled: false }, flexibleSinks: { greenhouse: { enabled: false }, absorptionCooling: { enabled: false } },
     hmpTargetTemp, gridBoosters: boosters.map(item => ({ ...item })) };
+}
+
+function guidedDemoRequiredBranches(input = readScenario()) {
+  const modelInput = guidedDemoInputs(input, input.hmpTargetTemp, []);
+  const key = JSON.stringify([modelInput, flexPrices()]);
+  if (key !== guidedDemoRequiredCacheKey) {
+    const current = simulateNetwork(modelInput, flexPrices()).withBooster;
+    guidedDemoRequiredCache = current.afterBranches.filter(branch => Number(branch.finalMargin) < 0);
+    guidedDemoRequiredCacheKey = key;
+  }
+  return guidedDemoRequiredCache;
+}
+
+function guidedDemoPlacedBranches(required = guidedDemoRequiredBranches()) {
+  const requiredIds = new Set(required.map(branch => branch.id));
+  return new Set(gridBoosters.filter(item => guidedDemoBoosterIds.has(item.id) && requiredIds.has(item.branchId))
+    .map(item => item.branchId));
+}
+
+function updateGuidedDemoObjective(input = readScenario()) {
+  const story = document.body.dataset.mode === "demo" && guidedDemoLayer === "story";
+  const active = document.body.dataset.mode === "demo";
+  $("guided-demo-objective").hidden = !active;
+  if (!active) return;
+  const step = story ? guidedStoryStep + 1 : guidedDemoStep + 1;
+  const title = story ? guidedStorySteps[guidedStoryStep]?.title : guidedDemoSteps[guidedDemoStep]?.title;
+  $("guided-demo-objective-step").textContent = story
+    ? `GUIDED DEMO · SIMPLE STORY · STEP ${step} OF 5` : `GUIDED DEMO · STEP ${step} OF 5`;
+  $("guided-demo-objective-task").textContent = story ? title.replace(/[.]/g, "") : guidedDemoSteps[guidedDemoStep]?.action;
+  const required = story ? [] : guidedDemoRequiredBranches(input);
+  const count = story ? "" : guidedDemoStep === 1
+    ? `IDENTIFIED ${identifiedCriticalBranches.size} / ${required.length} COMPLETE`
+    : guidedDemoStep === 2 ? `GRIDBOOSTERS PLACED ${guidedDemoPlacedBranches(required).size} / ${required.length} COMPLETE` : "";
+  $("guided-demo-objective-progress").textContent = count;
+  const cue = $("guided-demo-scroll-cue");
+  const instruction = $(story ? "guided-demo-story-layer" : "guided-demo-technical");
+  const needsScroll = !story && guidedDemoStep >= 3 && instruction?.getBoundingClientRect
+    && (() => { const rect = instruction.getBoundingClientRect(); return rect.top > window.innerHeight || rect.bottom < 0; })();
+  cue.hidden = !needsScroll;
+}
+
+function scrollGuidedDemoInstructionIntoViewIfNeeded() {
+  const target = $("guided-demo-technical");
+  if (!target?.getBoundingClientRect || !target.scrollIntoView) return;
+  const rect = target.getBoundingClientRect();
+  if (rect.top > window.innerHeight || rect.bottom < 0) target.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function renderGuidedDemoSourceOptions(result) {
+  const host = $("guided-demo-source-options");
+  host.hidden = guidedDemoStep !== 3;
+  if (host.hidden) { host.replaceChildren(); return; }
+  const modes = result?.withBooster?.dataCenterModes ?? {};
+  const options = [
+    ["raw-return", "DIRECT", "Raw waste heat to return"],
+    ["one-stage", "ONE-STAGE HP", "Heat pump to supply"],
+    ["two-stage", "TWO-STAGE HP", "Heat pump to supply"]
+  ];
+  host.innerHTML = options.map(([key, title, detail]) => {
+    const mode = modes[key];
+    const feasible = key !== "raw-return" && mode?.strictTemperatureEligible === true;
+    const available = key !== "raw-return" && mode?.temperatureRangeAvailable !== false;
+    const status = feasible ? "✓ SUPPORTS CURRENT NETWORK TARGET"
+      : key === "raw-return" ? "RETURN PATH · NOT A SUPPLY OPTION"
+        : !available ? "UNAVAILABLE FOR THIS SOURCE TEMPERATURE" : "NOT ENOUGH TEMPERATURE FOR CURRENT NETWORK TARGET";
+    return `<article class="${feasible ? "feasible" : "infeasible"}"><b>${title}</b><span>${detail}</span><strong>${status}</strong></article>`;
+  }).join("");
+}
+
+function updateGuidedDemoProgress() {
+  const required = guidedDemoRequiredBranches();
+  const requiredIds = new Set(required.map(branch => branch.id));
+  identifiedCriticalBranches = new Set([...identifiedCriticalBranches].filter(id => requiredIds.has(id)));
+  const placed = guidedDemoPlacedBranches(required);
+  bottleneckFound = required.length > 0 && identifiedCriticalBranches.size === required.length;
+  demoConstraintAddressed = required.length > 0 && placed.size === required.length;
+  if (guidedDemoStep === 1) {
+    const status = required.length
+      ? `IDENTIFIED ${identifiedCriticalBranches.size} / ${required.length} CRITICAL BRANCHES`
+      : "LOWER THE HMP TARGET UNTIL A BRANCH FALLS BELOW ITS REQUIRED TEMPERATURE";
+    $("guided-demo-progress-count").textContent = status;
+  } else if (guidedDemoStep === 2) {
+    $("guided-demo-progress-count").textContent = `GRIDBOOSTERS PLACED ${placed.size} / ${required.length}`;
+  } else $("guided-demo-progress-count").textContent = "";
+  if (guidedDemoLayer !== "technical" || document.body.dataset.mode !== "demo") return;
+  if (guidedDemoStep === 1 && required.length > 0 && identifiedCriticalBranches.size === required.length)
+    scheduleGuidedDemoAutoAdvance(1, () => {
+      const current = guidedDemoRequiredBranches();
+      return current.length > 0 && identifiedCriticalBranches.size === current.length
+        && current.every(branch => identifiedCriticalBranches.has(branch.id));
+    });
+  else if (guidedDemoStep === 2 && required.length > 0 && placed.size === required.length)
+    scheduleGuidedDemoAutoAdvance(2, () => {
+      const current = guidedDemoRequiredBranches();
+      const currentPlaced = guidedDemoPlacedBranches(current);
+      return current.length > 0 && currentPlaced.size === current.length
+        && current.every(branch => currentPlaced.has(branch.id));
+    });
+  else cancelGuidedDemoAutoAdvance();
 }
 
 function guidedOperatingCost(state, prices) {
@@ -787,39 +929,134 @@ function guidedOperatingCost(state, prices) {
     + Number(state.plantRampPenaltyPerHour ?? 0) - Number(state.flexibleSinks?.absorptionCooling.coolingRevenuePerHour ?? 0);
 }
 
+const guidedStorySteps = [
+  { title: "THIS HEAT ALREADY EXISTS.", copy: "A nearby source has useful leftover heat, but it is cooler than the water the network currently needs.", prompt: "Look at the data center: its leftover heat is available before GridBooster is added." },
+  { title: "BUT SOME CUSTOMERS NEED HIGHER TEMPERATURE.", copy: "Most customers could use cooler water. One or more customers may need hotter water.", prompt: "Temperature-critical customers are highlighted in the live network." },
+  { title: "HOTTER CUSTOMERS CAN KEEP THE WHOLE NETWORK HOTTER.", copy: "If the whole network must stay hot enough for its most demanding customers, cooler waste heat can be difficult to use directly.", prompt: "Follow the highlighted customers back to the wider network." },
+  { title: "BOOST ONLY WHERE THE EXTRA TEMPERATURE IS NEEDED.", copy: "GridBooster raises the water temperature locally for temperature-critical customers, so the rest of the network can stay cooler.", prompt: "Activate GridBooster for the highlighted customer or customers." },
+  { title: "NOW THE NETWORK CAN USE MORE WASTE HEAT.", copy: "Local boosters serve the hotter customers while the wider network can use the cooler source heat in this modeled example.", prompt: "The live model shows the source and customers connected through the same network." }
+];
+
+function renderGuidedStory(input) {
+  const step = guidedStorySteps[guidedStoryStep];
+  updateGuidedDemoObjective(input);
+  const root = $("guided-demo");
+  root.dataset.storyStep = String(guidedStoryStep);
+  $("guided-story-step-label").textContent = `SIMPLE STORY · STEP ${guidedStoryStep + 1} OF 5`;
+  $("guided-story-step-title").textContent = step.title;
+  $("guided-story-step-copy").textContent = step.copy;
+  $("guided-story-prompt-label").textContent = guidedStoryStep === 3 ? "ACTION" : guidedStoryStep === 4 ? "LIVE MODEL RESULT" : "NOTICE";
+  $("guided-story-prompt").textContent = step.prompt;
+  $("guided-story-feedback").textContent = "";
+  $("guided-story-takeaway").hidden = guidedStoryStep !== 4;
+  $("guided-story-takeaway").textContent = "The value of our booster isn't the heat it produces. It's the waste heat it unlocks.";
+  $("guided-story-source-caption").hidden = false;
+  $("guided-story-source-caption").textContent = guidedStoryStep === 4 && root.dataset.storyHeatUnlocked === "true"
+    ? "WASTE HEAT NOW IN USE" : "USEFUL WASTE-HEAT SOURCE";
+
+  guidedStoryCriticalBranches = guidedStoryStep > 0 ? guidedDemoRequiredBranches(input).map(branch => branch.id) : [];
+
+  if (guidedStoryStep === 3) {
+    $("guided-story-feedback").textContent = "The live model is ready. Activate GridBooster to add local heat for this customer.";
+  } else if (guidedStoryStep === 4) {
+    const baseline = simulateNetwork(guidedDemoInputs(input, 90, []), flexPrices()).withBooster;
+    const current = latestNetworkState?.withBooster;
+    const addedHeatKW = Number(current?.totalWasteHeatUsedKW ?? 0) - baseline.totalWasteHeatUsedKW;
+    const unlocked = Boolean(demoConstraintAddressed && addedHeatKW > 0);
+    root.dataset.storyHeatUnlocked = String(unlocked);
+    $("guided-story-source-caption").textContent = unlocked ? "WASTE HEAT NOW IN USE" : "WASTE-HEAT SOURCE";
+    $("guided-story-feedback").textContent = unlocked
+      ? "The live model now uses more heat from the nearby source while GridBooster serves the hotter customer locally."
+      : "This modeled setup did not increase heat use from the nearby source. The technical view shows the calculated conditions.";
+  }
+
+  $("guided-story-back").disabled = guidedStoryStep === 0;
+  $("guided-story-next").hidden = guidedStoryStep >= 3;
+  $("guided-story-activate").hidden = guidedStoryStep !== 3;
+  $("guided-story-restart").hidden = guidedStoryStep !== 4;
+  $("guided-story-open-technical").hidden = guidedStoryStep !== 4;
+  $("guided-demo-story-layer").hidden = guidedDemoLayer !== "story";
+  $("guided-demo-technical").hidden = guidedDemoLayer !== "technical";
+  root.dataset.layer = guidedDemoLayer;
+}
+
 function renderGuidedDemo(input, result) {
+  $("guided-demo-layer-label").textContent = guidedDemoLayer === "story"
+    ? "A SIMPLE STORY · LIVE NETWORK MODEL" : "GUIDED DEMO · TECHNICAL DETAILS";
+  if (guidedDemoLayer === "story") {
+    renderGuidedStory(input, result);
+    return;
+  }
+  $("guided-demo-story-layer").hidden = true;
+  $("guided-demo-technical").hidden = false;
+  $("guided-demo").dataset.layer = "technical";
+  renderTechnicalGuidedDemo(input, result);
+}
+
+function renderTechnicalGuidedDemo(input, result) {
   const step = guidedDemoSteps[guidedDemoStep];
+  const wasteHeatUtilizedKW = Number(latestNetworkState?.withBooster?.totalWasteHeatUsedKW ?? result?.withBooster?.totalWasteHeatUsedKW ?? 0);
+  const canContinueHmpStep = Number.isFinite(wasteHeatUtilizedKW) && wasteHeatUtilizedKW > 0;
   $("guided-demo-step-label").textContent = `STEP ${guidedDemoStep + 1} OF 5`;
   $("guided-demo-step-title").textContent = step.title;
   $("guided-demo-step-copy").textContent = step.copy;
+  $("demo-action").textContent = step.action;
+  $("demo-watch-for").textContent = step.watchFor;
+  $("demo-branch-feedback").textContent = guidedDemoStep === 0 && canContinueHmpStep
+    ? "✓ WASTE HEAT CAN NOW ENTER THE NETWORK"
+    : step.result;
   $("guided-demo-assumption").textContent = "Illustrative demonstration inputs · outputs are calculated by the simplified Gridbooster model, not measured or externally validated.";
   $("demo-annual-value").textContent = "Unavailable";
-  $("demo-branch-prompt").hidden = guidedDemoStep !== 1;
-  $("guided-demo-activate").hidden = guidedDemoStep !== 2 || demoConstraintAddressed;
-  $("guided-demo-activate").disabled = !selectedNetworkBranch;
-  const bottleneck = findPrimaryTemperatureBottleneck(latestNetworkState?.withBooster.afterBranches ?? []);
-  if (guidedDemoStep === 1) $("demo-branch-feedback").textContent = !bottleneck
-    ? translate("interaction.no_constraint")
-    : selectedNetworkBranch === bottleneck.id && bottleneckFound
-      ? translate("interaction.constraint_found", { branch: bottleneck.id, deficit: fmt(-bottleneck.finalMargin) })
-      : selectedNetworkBranch ? translate("interaction.try_another") : "";
-  else if (guidedDemoStep === 2 && demoConstraintAddressed)
-    $("demo-branch-feedback").textContent = translate("interaction.constraint_addressed", { branch: selectedNetworkBranch });
-  else if (guidedDemoStep === 2 && gridBoosters.length && bottleneck)
-    $("demo-branch-feedback").textContent = translate("interaction.constraint_remains", { branch: gridBoosters[0].branchId, primary: bottleneck.id });
-  else if (guidedDemoStep !== 1) $("demo-branch-feedback").textContent = "";
+  const required = guidedDemoRequiredBranches(input);
+  const requiredIds = new Set(required.map(branch => branch.id));
+  const placed = guidedDemoPlacedBranches(required);
+  const selectedRequiresBooster = requiredIds.has(selectedNetworkBranch) && !placed.has(selectedNetworkBranch);
+  $("guided-demo-activate").hidden = true;
+  $("guided-demo-activate").disabled = !selectedRequiresBooster;
+  if (guidedDemoStep === 1) {
+    if (!required.length) $("demo-branch-feedback").textContent = translate("interaction.no_constraint");
+    else if (selectedNetworkBranch && identifiedCriticalBranches.has(selectedNetworkBranch))
+      $("demo-branch-feedback").textContent = `${selectedNetworkBranch} identified. Select the remaining red branches in the network.`;
+    else if (selectedNetworkBranch) $("demo-branch-feedback").textContent = translate("interaction.try_another");
+    else $("demo-branch-feedback").textContent = `There ${required.length === 1 ? "is" : "are"} ${required.length} temperature-critical ${required.length === 1 ? "branch" : "branches"}.`;
+  } else if (guidedDemoStep === 2) {
+    if (placed.size === required.length && required.length > 0)
+      $("demo-branch-feedback").textContent = `All ${required.length} required branches have a GridBooster.`;
+    else if (selectedNetworkBranch && !requiredIds.has(selectedNetworkBranch))
+      $("demo-branch-feedback").textContent = "This branch does not currently require a GridBooster.";
+    else if (selectedNetworkBranch && placed.has(selectedNetworkBranch))
+      $("demo-branch-feedback").textContent = `${selectedNetworkBranch} already has a GridBooster.`;
+    $("guided-demo-progress-count").textContent = `GRIDBOOSTERS PLACED ${placed.size} / ${required.length}`;
+  }
+  if (guidedDemoStep === 1) $("guided-demo-progress-count").textContent = required.length
+    ? `IDENTIFIED ${identifiedCriticalBranches.size} / ${required.length} CRITICAL BRANCHES` : "LOWER THE HMP TARGET UNTIL A BRANCH FALLS BELOW ITS REQUIRED TEMPERATURE";
   $("demo-hmp-control").value = String(input.hmpTargetTemp);
   $("demo-hmp-value").textContent = `${fmt(Number(input.hmpTargetTemp))} °C`;
   $("demo-comparison-toggle").textContent = translate(demoComparisonBaseline ? "interaction.show_current" : "interaction.show_baseline");
   $("demo-comparison-toggle").setAttribute("aria-pressed", String(demoComparisonBaseline));
   $("demo-baseline-label").textContent = translate("interaction.baseline_label");
   $("demo-current-label").textContent = translate(gridBoosters.some(item => item.branchId) ? "interaction.current_with_booster" : "interaction.current_without_booster");
-  $("guided-demo-back").disabled = guidedDemoStep === 0;
-  $("guided-demo-next").disabled = guidedDemoStep === 1 && !bottleneckFound || guidedDemoStep === 2 && !demoConstraintAddressed;
-  $("guided-demo-next").textContent = guidedDemoStep === 4 ? "RESTART ↻" : "NEXT →";
+  $("guided-demo-back").disabled = false;
+  $("guided-demo-next").hidden = guidedDemoStep === 1 || guidedDemoStep === 2 || guidedDemoStep === guidedDemoSteps.length - 1;
+  $("guided-demo-next").disabled = guidedDemoStep === 0 && !canContinueHmpStep;
+  $("guided-demo-next").textContent = guidedDemoStep === 3 ? "CONTINUE →" : "NEXT →";
+  const hmpNavigation = $("guided-demo-hmp-navigation");
+  const footer = $("guided-demo-footer");
+  if (guidedDemoStep === 0) {
+    hmpNavigation.hidden = false;
+    hmpNavigation.append($("guided-demo-back"), $("guided-demo-next"));
+    footer.hidden = true;
+  } else {
+    hmpNavigation.hidden = true;
+    footer.hidden = false;
+    footer.append($("guided-demo-back"), $("guided-demo-restart"), $("guided-demo-next"));
+  }
+  renderGuidedDemoSourceOptions(result);
+  updateGuidedDemoObjective(input);
   document.querySelectorAll("[data-demo-goto]").forEach(button => {
     const active = Number(button.dataset.demoGoto) === guidedDemoStep;
-    button.disabled = Number(button.dataset.demoGoto) === 2 && !bottleneckFound || Number(button.dataset.demoGoto) > 2 && !demoConstraintAddressed;
+    button.disabled = Number(button.dataset.demoGoto) === 2 && !(required.length > 0 && identifiedCriticalBranches.size === required.length)
+      || Number(button.dataset.demoGoto) > 2 && !(required.length > 0 && placed.size === required.length);
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "step" : "false");
   });
@@ -862,26 +1099,78 @@ function renderGuidedDemo(input, result) {
 }
 
 function applyGuidedDemoStep(step) {
+  cancelGuidedDemoAutoAdvance();
+  updateGuidedDemoProgress();
   const destination = Math.max(0, Math.min(step, guidedDemoSteps.length - 1));
-  if (destination >= 2 && !bottleneckFound || destination >= 3 && !demoConstraintAddressed) return;
+  const required = guidedDemoRequiredBranches();
+  const placed = guidedDemoPlacedBranches(required);
+  if (destination >= 2 && !(required.length > 0 && identifiedCriticalBranches.size === required.length)
+    || destination >= 3 && !(required.length > 0 && placed.size === required.length)) return;
   guidedDemoStep = destination;
   renderBoosterTray();
+  recalculate();
+  if (destination === 3) scrollGuidedDemoInstructionIntoViewIfNeeded();
+}
+
+function resetGuidedDemoModel() {
+  cancelGuidedDemoAutoAdvance();
+  guidedDemoStep = 0;
+  selectedNetworkBranch = "";
+  bottleneckFound = false;
+  demoConstraintAddressed = false;
+  identifiedCriticalBranches.clear();
+  guidedDemoBoosterIds.clear();
+  demoComparisonBaseline = false;
+  gridBoosters = [];
+  guidedDemoBooster.branchId = "";
+  selectedBoosterId = "";
+  loadScenario(0);
+  $("dc-temp").value = "83";
+  $("dc-mode").value = "two-stage";
+  $("network-dc-route").value = "two-stage";
+  $("scenario-description").textContent = "Illustrative guided case: compare a 90 °C baseline with a lower HMP target, using the same 83 °C data-center waste-heat source and local boosters on temperature-critical branches.";
+  $("hmp-target").value = "90";
+  $("hmp-target-slider").value = "90";
+  $("guided-demo").dataset.storyHeatUnlocked = "false";
   recalculate();
 }
 
 function restartGuidedDemo() {
-  loadScenario(0);
-  $("dc-temp").value = "83";
-  $("dc-mode").value = "two-stage";
-  $("scenario-description").textContent = "Illustrative guided case: compare a 90 °C baseline with an 80 °C HMP target, using the same 83 °C data-center waste-heat source and a local booster on Branch A.";
-  selectedNetworkBranch = "";
-  bottleneckFound = false;
-  demoConstraintAddressed = false;
-  demoComparisonBaseline = false;
-  gridBoosters = [];
-  $("hmp-target").value = "90";
-  $("hmp-target-slider").value = "90";
-  applyGuidedDemoStep(0);
+  guidedDemoLayer = "technical";
+  resetGuidedDemoModel();
+}
+
+function restartGuidedDemoStory() {
+  guidedDemoLayer = "story";
+  guidedStoryStep = 0;
+  guidedStoryCriticalBranches = [];
+  resetGuidedDemoModel();
+}
+
+function setGuidedStoryStep(step) {
+  const destination = Math.max(0, Math.min(step, guidedStorySteps.length - 1));
+  if (destination === 4 && !demoConstraintAddressed) return;
+  guidedStoryStep = destination;
+  if (destination === 0) guidedStoryCriticalBranches = [];
+  if (destination <= 2 || destination === 3) {
+    resetGuidedDemoModel();
+    if (destination > 0) {
+      const lowTarget = simulateNetwork(guidedDemoInputs(readScenario(), 80, []), flexPrices()).withBooster;
+      guidedStoryCriticalBranches = lowTarget.afterBranches.filter(branch => branch.finalMargin < 0).map(branch => branch.id);
+      if (destination < 3) recalculate();
+    }
+    if (destination === 3) {
+      guidedDemoStep = 2;
+      $("hmp-target").value = "80";
+      $("hmp-target-slider").value = "80";
+      recalculate();
+      const critical = guidedDemoRequiredBranches();
+      guidedStoryCriticalBranches = critical.map(branch => branch.id);
+      selectedNetworkBranch = critical[0]?.id ?? "";
+      bottleneckFound = critical.length > 0;
+      recalculate();
+    }
+  } else recalculate();
 }
 
 function flexPrices() {
@@ -2157,11 +2446,7 @@ function recalculate() {
       }
     }
     latestNetworkState = result;
-    if (guidedDemoStep === 1) {
-      const bottleneck = findPrimaryTemperatureBottleneck(result.withBooster.afterBranches);
-      if (!bottleneck) { bottleneckFound = false; $("demo-branch-feedback").textContent = translate("interaction.no_constraint"); }
-      else if (selectedNetworkBranch !== bottleneck.id) bottleneckFound = false;
-    }
+    if (document.body.dataset.mode === "demo" && guidedDemoLayer === "technical") updateGuidedDemoProgress();
     const comparisonView = document.body.dataset.mode === "demo" && demoComparisonBaseline
       ? simulateNetwork(guidedDemoInputs(input, 90, []), prices) : result;
     warning.hidden = true; warning.textContent = ""; render(comparisonView, input); renderOpportunitySummary(input, result, prices); renderFlex(input, result);
@@ -2308,18 +2593,59 @@ $("network-map").addEventListener("keydown", event => {
   if (customer) { event.preventDefault(); selectedPip3Branch = customer.dataset.branch; selectedNetworkBranch = customer.dataset.branch; recalculate(); }
   if (returnObject) { event.preventDefault(); if (returnObject.dataset.returnObject === "pip3") selectedPip3Branch = returnObject.dataset.nodeId; if (document.body.dataset.mode === "demo") inspectObject(returnObject.dataset.returnObject); }
 });
-$("guided-demo-activate").addEventListener("click", () => {
-  const primary = findPrimaryTemperatureBottleneck(latestNetworkState?.withBooster.afterBranches ?? []);
-  if (!selectedNetworkBranch) { $("demo-branch-feedback").textContent = translate("interaction.choose_branch"); return; }
-  if (!primary) { $("demo-branch-feedback").textContent = translate("interaction.no_constraint"); return; }
-  guidedDemoBooster.branchId = selectedNetworkBranch;
-  gridBoosters = [{ ...guidedDemoBooster }];
-  renderBoosterTray(); recalculate();
-  const boostedBranch = latestNetworkState.withBooster.afterBranches.find(branch => branch.id === selectedNetworkBranch);
-  demoConstraintAddressed = selectedNetworkBranch === primary.id && boostedBranch?.finalMargin >= 0;
-  if (demoConstraintAddressed) $("demo-branch-feedback").textContent = translate("interaction.constraint_addressed", { branch: selectedNetworkBranch });
-  else $("demo-branch-feedback").textContent = translate("interaction.constraint_remains", { branch: selectedNetworkBranch, primary: primary.id });
+function activateGuidedDemoBooster() {
+  cancelGuidedDemoAutoAdvance();
+  const required = guidedDemoRequiredBranches();
+  const requiredIds = new Set(required.map(branch => branch.id));
+  const feedback = guidedDemoLayer === "story" ? $("guided-story-feedback") : $("demo-branch-feedback");
+  if (!required.length) { feedback.textContent = translate("interaction.no_constraint"); return false; }
+  if (guidedDemoLayer === "story") {
+    gridBoosters = required.map(branch => {
+      const item = { ...guidedDemoBooster, id: allocateBoosterId(), branchId: branch.id };
+      guidedDemoBoosterIds.add(item.id);
+      return item;
+    });
+    recalculate();
+    demoConstraintAddressed = guidedDemoPlacedBranches(required).size === required.length;
+    feedback.textContent = demoConstraintAddressed
+      ? `GridBooster is active at all ${required.length} temperature-critical ${required.length === 1 ? "customer" : "customers"}. The rest of the network keeps its lower temperature target.`
+      : "The live model needs another GridBooster on a temperature-critical customer.";
+    return demoConstraintAddressed;
+  }
+  if (!selectedNetworkBranch) { feedback.textContent = translate("interaction.choose_branch"); return false; }
+  if (!requiredIds.has(selectedNetworkBranch)) {
+    feedback.textContent = "This branch does not currently require a GridBooster.";
+    return false;
+  }
+  if (guidedDemoPlacedBranches(required).has(selectedNetworkBranch)) {
+    feedback.textContent = `${selectedNetworkBranch} already has a GridBooster.`;
+    return false;
+  }
+  return addGuidedDemoBoosterToBranch(selectedNetworkBranch);
+}
+
+function addGuidedDemoBoosterToBranch(branchId) {
+  if (document.body.dataset.mode !== "demo" || guidedDemoLayer !== "technical" || guidedDemoStep !== 2) return false;
+  cancelGuidedDemoAutoAdvance();
+  const required = guidedDemoRequiredBranches();
+  if (!required.some(branch => branch.id === branchId)) {
+    $("demo-branch-feedback").textContent = "This branch does not currently require a GridBooster.";
+    return false;
+  }
+  if (guidedDemoPlacedBranches(required).has(branchId)) return false;
+  const item = { ...guidedDemoBooster, id: allocateBoosterId(), branchId };
+  gridBoosters.push(item);
+  guidedDemoBoosterIds.add(item.id);
+  renderBoosterTray();
   recalculate();
+  const currentRequired = guidedDemoRequiredBranches();
+  const placed = guidedDemoPlacedBranches(currentRequired);
+  $("demo-branch-feedback").textContent = `${branchId} GridBooster installed. GRIDBOOSTERS PLACED ${placed.size} / ${currentRequired.length}.`;
+  return true;
+}
+$("guided-demo-activate").addEventListener("click", activateGuidedDemoBooster);
+$("guided-story-activate").addEventListener("click", () => {
+  if (activateGuidedDemoBooster()) setGuidedStoryStep(4);
 });
 $("hmp-target-slider").addEventListener("input", () => { $("hmp-target").value = $("hmp-target-slider").value; recalculate(); });
 $("hmp-chart-metric").addEventListener("change", () => {
@@ -2570,15 +2896,24 @@ function countHmpClickTowardConsultUnlock() {
 for (const id of ["hmp-node", "full-hmp-node"]) $(id).addEventListener("click", countHmpClickTowardConsultUnlock);
 $("quick-demo-start").addEventListener("click", () => {
   setAudienceMode("demo");
-  restartGuidedDemo();
+  restartGuidedDemoStory();
   $("guided-demo").scrollIntoView?.({ behavior: "smooth", block: "start" });
 });
-$("guided-demo-back").addEventListener("click", () => applyGuidedDemoStep(guidedDemoStep - 1));
+$("guided-story-back").addEventListener("click", () => setGuidedStoryStep(guidedStoryStep - 1));
+$("guided-story-next").addEventListener("click", () => setGuidedStoryStep(guidedStoryStep + 1));
+$("guided-story-restart").addEventListener("click", restartGuidedDemoStory);
+$("guided-story-open-technical").addEventListener("click", restartGuidedDemo);
+$("guided-demo-story-return").addEventListener("click", restartGuidedDemoStory);
+$("guided-demo-back").addEventListener("click", () => {
+  if (guidedDemoStep === 0) restartGuidedDemoStory();
+  else applyGuidedDemoStep(guidedDemoStep - 1);
+});
 $("guided-demo-next").addEventListener("click", () => {
   if (guidedDemoStep === 4) restartGuidedDemo();
   else applyGuidedDemoStep(guidedDemoStep + 1);
 });
 $("guided-demo-restart").addEventListener("click", restartGuidedDemo);
+$("guided-demo-scroll-cue").addEventListener("click", scrollGuidedDemoInstructionIntoViewIfNeeded);
 document.querySelectorAll("[data-demo-goto]").forEach(button => button.addEventListener("click", () => {
   const destination = Number(button.dataset.demoGoto);
   applyGuidedDemoStep(destination);
@@ -2586,9 +2921,11 @@ document.querySelectorAll("[data-demo-goto]").forEach(button => button.addEventL
 $("dc-temp").value = "83";
 $("dc-mode").value = "two-stage";
 $("sensitivity-min").value = "20"; $("sensitivity-max").value = "120"; $("sensitivity-step").value = "10";
-$("scenario-description").textContent = "Illustrative guided case: compare a 90 °C baseline with an 80 °C HMP target, using the same 83 °C data-center waste-heat source and a local booster on Branch A.";
+$("scenario-description").textContent = "Illustrative guided case: compare a 90 °C baseline with a lower HMP target, using the same 83 °C data-center waste-heat source and local boosters on temperature-critical branches.";
 refreshSensitivityControls(true);
-applyGuidedDemoStep(0);
+guidedStoryStep = 0;
+guidedDemoLayer = "story";
+resetGuidedDemoModel();
 
 $("consult-run").addEventListener("click", () => {
   const button = $("consult-run");
