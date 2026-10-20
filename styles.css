@@ -1382,3 +1382,38 @@ body[data-mode="engineer"] .network-branch-row .branch-booster-station:not(.casu
 @media(max-width:1050px){body[data-mode="demo"] #guided-demo[data-layer="story"]{display:flex;flex-direction:column}body[data-mode="demo"] #guided-demo-story-layer{order:1;width:100%;box-sizing:border-box}body[data-mode="demo"] #guided-demo-network{order:2;width:100%;padding:0}body[data-mode="demo"] #guided-demo-technical{order:3;width:100%}body[data-mode="demo"] #guided-demo-technical:not([hidden]){display:block}body[data-mode="demo"] .guided-demo-technical-heading{display:flex}}
 @media(max-width:650px){.guided-demo-story-layer{padding:12px}.guided-story-copy{font-size:13px}.guided-story-footer button{min-height:44px;font-size:7px}}
 @media(prefers-reduced-motion:reduce){#guided-demo[data-layer="story"] #network-map .map-node,#guided-demo[data-layer="story"] #network-map .network-branch-row,#guided-demo[data-layer="story"] #network-map .source-pipe{transition:none}#guided-demo[data-layer="story"][data-story-step="4"] #network-map #dc-feed-pipe{animation:none}}
+
+/* Hierarchy polish: sans-serif for readable copy, pixel type for instruments. */
+.mode-selector-heading h2{font:800 18px/1.25 system-ui,sans-serif;letter-spacing:-.025em}
+.mode-choice>span{font:800 12px/1.3 system-ui,sans-serif;letter-spacing:0}
+.guided-demo-heading .eyebrow,.guided-demo-story-layer>.eyebrow{font:700 10px/1.35 system-ui,sans-serif;letter-spacing:.035em}
+.guided-demo-technical-heading h2{font:750 15px/1.3 system-ui,sans-serif}
+.guided-demo-story-layer>h3{font:750 clamp(17px,1.7vw,22px)/1.3 system-ui,sans-serif;letter-spacing:-.025em}
+.guided-story-prompt>b,.guided-demo-action>b,.guided-demo-watch>b,.guided-demo-feedback>b{font:750 10px/1.3 system-ui,sans-serif;letter-spacing:0}
+.guided-demo-action>p,.guided-demo-watch>p{font-weight:600}
+#guided-demo[data-layer="story"] .guided-demo-objective{display:none}
+.commercial-stages article>b{color:#688296;font:750 9px/1.3 system-ui,sans-serif;letter-spacing:.025em}
+.commercial-stages h3{font-weight:750;letter-spacing:-.02em}
+.branch-route-head>strong{font:750 11px/1.3 system-ui,sans-serif;white-space:normal}
+.branch-route-values{align-items:center;gap:5px 10px;color:#71889a;font:600 10px/1.35 system-ui,sans-serif}
+.branch-route-values .branch-temp{font:900 15px/1.15 var(--pixel);color:#197fa9}
+.branch-route-values .branch-temp small{margin-left:4px;color:#6e8795;font:650 10px/1.2 system-ui,sans-serif;letter-spacing:0}
+.branch-route-values>span:first-of-type{color:#345b72;font-weight:750}
+.branch-route-values>span:last-child{font:600 10px/1.35 system-ui,sans-serif;color:#71889a}
+.full-branch-card .branch-route-values{font-size:8px}
+.branch-drop-hint{font:600 7px/1.4 system-ui,sans-serif}
+.full-branch-card .branch-route-head>strong{font:750 11px/1.3 system-ui,sans-serif}
+.guided-demo-objective p{font:700 10px/1.3 system-ui,sans-serif;letter-spacing:.02em}
+.guided-demo-objective b{font:750 12px/1.35 system-ui,sans-serif}
+@media(max-width:760px){
+  .branch-route-head>strong,.full-branch-card .branch-route-head>strong{font-size:10px}
+  .branch-route-values{font-size:10px;gap:4px 7px}
+  .branch-route-values .branch-temp{font-size:13px}
+  .branch-route-values .branch-temp small{font-size:9px}
+  .full-branch-card .branch-route-values{font-size:9px}
+}
+@media(max-width:650px){
+  .mode-choice>span{font-size:9px}
+  .guided-demo-story-layer>h3{font-size:17px;line-height:1.3}
+  .commercial-stages article>b{font-size:8px}
+}

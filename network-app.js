@@ -498,17 +498,17 @@ function renderBranches(result) {
     const boosters = branch.gridBoosters.map(item => casual
       ? `<div class="branch-booster-station casual-booster-station${selectedBoosterId === item.id ? " selected" : ""}" draggable="true" tabindex="0" role="button" aria-pressed="${selectedBoosterId === item.id}" data-booster-id="${item.id}" aria-label="${escapeHtml(translate("casual.select_booster", { id: item.id }))}"><span>⚡</span><b>${item.id}</b><span>${escapeHtml(translate("casual.boosted_to", { temperature: fmtTemp(branch.finalSupplyTemp) }))}</span><button type="button" data-casual-remove="${item.id}" aria-label="${escapeHtml(translate("interaction.remove_booster", { id: item.id }))}">×</button></div>`
       : `<div class="branch-booster-station" draggable="true" data-booster-id="${item.id}"><span>⚡</span><b>${item.id} · GRIDBOOSTER</b><small>IN ${fmt(item.inletTemp)} °C → OUT ${fmt(item.outletTemp)} °C</small><small>LIFT +${fmt(item.actualLiftK)} K · ${fmt(item.thermalPowerKW / 1000, 2)} MW</small><small>ELECTRIC ${fmt(item.electricalPowerKW)} kW · COP ${fmt(item.cop, 2)}</small><small>MAX ${fmt(item.maxThermalKW / 1000, 2)} MW · ${item.capacitySufficient ? "✓ CAPACITY OK" : `! UNDERSIZED · ${fmt((item.requestedPowerKW - item.thermalPowerKW) / 1000, 2)} MW short`}</small>${showWhy ? `<button type="button" class="network-why-button" data-inspect-kind="booster" data-i18n="interaction.why">WHY?</button>` : ""}${branch.feasibleWithoutBooster ? `<small class="booster-note">Booster installed — branch already feasible without local lift.</small>` : ""}</div>`).join("");
-    const duty = branch.boosterActive ? `ACTUAL LOCAL DUTY ${fmt(branch.boosterThermalPowerKW / 1000, 2)} MW · ${fmt(branch.boosterElectricalPowerKW)} kW` : `REQUIRED / HYPOTHETICAL DUTY ${fmt(branch.requiredBoosterPowerKW / 1000, 2)} MW`;
+    const duty = branch.boosterActive ? `Actual local duty ${fmt(branch.boosterThermalPowerKW / 1000, 2)} MW · ${fmt(branch.boosterElectricalPowerKW)} kW` : `Required / hypothetical duty ${fmt(branch.requiredBoosterPowerKW / 1000, 2)} MW`;
     const casualStatus = branch.boosterActive ? translate("casual.boosted")
       : branch.status === "unavailable" || branch.status === "below" ? translate("casual.too_cold")
         : branch.status === "close" ? translate("casual.close") : translate("casual.ok");
     const casualSummary = casual ? `<div class="casual-branch-summary"><b class="casual-branch-state">${casualStatus}</b>${branch.boosterActive ? `<span>${escapeHtml(translate("casual.boosted_to", { temperature: fmtTemp(branch.finalSupplyTemp) }))}</span>` : branch.margin < 0 ? `<span>${escapeHtml(translate("casual.needs_lift", { lift: fmt(-branch.margin) }))}</span>` : ""}${!branch.feasibleWithoutBooster && !branch.gridBoosters.length ? `<button type="button" class="casual-boost-action" data-casual-boost="${branch.id}">${escapeHtml(translate("casual.boost_branch"))}</button>` : ""}</div>` : "";
-    const guidedStoryCustomerCaption = guidedStoryBranches.has(branch.id) ? `<small class="guided-story-customer-caption">TEMPERATURE-CRITICAL CUSTOMER</small>` : "";
+    const guidedStoryCustomerCaption = guidedStoryBranches.has(branch.id) ? `<small class="guided-story-customer-caption">Temperature-critical customer</small>` : "";
     const guidedAction = guidedTechnical && guidedDemoStep === 2 && guidedRequired
       ? `<div class="guided-demo-branch-action">${guidedPlaced ? `<span class="guided-demo-branch-placed">✓ GRIDBOOSTER PLACED</span>` : `<button type="button" data-guided-demo-boost="${branch.id}">+ ADD GRIDBOOSTER</button>`}</div>` : "";
     row.innerHTML = `<div class="branch-pipe-connector"><span>${branch.id <= "C" ? "▲" : "▼"}</span></div><div class="branch-route-card">
-      <div class="branch-route-head"><b class="branch-flag">${branch.id}</b><strong>${casual ? escapeHtml(translate("casual.branch", { branch: branch.id })) : `${escapeHtml(branch.name).toUpperCase()} · CUSTOMER LOAD`}</strong>${guidedStoryCustomerCaption}<span class="branch-status">${casual ? casualStatus : label}</span>${showWhy ? `<button type="button" class="network-why-button" data-why-branch="${branch.id}" data-i18n="interaction.why">WHY?</button>` : ""}</div>
-      ${casualSummary}<div class="branch-route-values"><b class="branch-temp">TEMP CAPABILITY ${fmt(branch.availableSupplyTemp)} °C</b><span>MIN ${fmt(branch.minimumSupplyTemp)} °C</span><span>LOAD ${fmt(branch.demandKW / 1000, 2)} MW</span><span>FLOW ${fmt(branch.flowM3h)} m³/h</span><span>HMP → BRANCH ΔT LOSS −${fmt(branch.lossToBranch)} K</span><span>CAPABILITY MARGIN ${fmt(branch.margin)} K</span><span>WITHOUT BOOSTER ${branch.feasibleWithoutBooster ? "✓ TEMP CAPABLE" : "! BELOW MINIMUM"}</span><span>${duty}</span></div>
+      <div class="branch-route-head"><b class="branch-flag">${branch.id}</b><strong>${casual ? escapeHtml(translate("casual.branch", { branch: branch.id })) : `${escapeHtml(branch.name)} · customer load`}</strong>${guidedStoryCustomerCaption}<span class="branch-status">${casual ? casualStatus : label}</span>${showWhy ? `<button type="button" class="network-why-button" data-why-branch="${branch.id}" data-i18n="interaction.why">WHY?</button>` : ""}</div>
+      ${casualSummary}<div class="branch-route-values"><b class="branch-temp">${fmt(branch.availableSupplyTemp)} °C <small>Capability</small></b><span>Minimum ${fmt(branch.minimumSupplyTemp)} °C</span><span>Load ${fmt(branch.demandKW / 1000, 2)} MW</span><span>Flow ${fmt(branch.flowM3h)} m³/h</span><span>HMP → branch loss −${fmt(branch.lossToBranch)} K</span><span>Margin ${fmt(branch.margin)} K</span><span>Without booster ${branch.feasibleWithoutBooster ? "✓ Temp capable" : "! Below minimum"}</span><span>${duty}</span></div>
       <div class="branch-drop-hint">DROP GRIDBOOSTER HERE · BASE CAPABILITY ${fmt(branch.availableSupplyTemp)} °C → BOOSTED CAPABILITY ${fmt(branch.finalSupplyTemp)} °C · MARGIN ${fmt(branch.finalMargin)} K</div>
     </div>${guidedAction}${boosters}`;
     row.addEventListener("dragover", event => {
@@ -791,11 +791,11 @@ function renderComparison(result, comparison) {
 }
 
 const guidedDemoSteps = [
-  { title: "THE HEAT IS ALREADY THERE.", copy: "An available waste-heat source sits below the network's current temperature requirement. Available energy is not necessarily usable energy.", action: "Lower the network temperature until waste heat can enter the system.", watchFor: "The waste-heat source becomes able to feed the network.", result: "Watch the source and network as you lower the temperature." },
-  { title: "TEMPERATURE-CRITICAL BRANCHES CAN LIMIT THE NETWORK.", copy: "Lowering the central temperature makes the source eligible in this example. Every branch below its minimum temperature needs attention.", action: "If needed, lower HMP to 80 °C, then identify every red branch in the live network.", watchFor: "Progress shows how many temperature-critical branches you have identified.", result: "Select each branch with a temperature deficit." },
-  { title: "BOOST LOCALLY. NOT EVERYWHERE.", copy: "Gridbooster lifts each selected branch that needs a local temperature increase. Activate one on every temperature-critical branch.", action: "On each red branch, choose + ADD GRIDBOOSTER.", watchFor: "Each installed booster appears on its branch; the count updates here.", result: "Install a GridBooster on every branch that needs local lift." },
-  { title: "DATA-CENTER OPTIONS", copy: "The source can reach the current network target through some delivery routes, while others may not be warm enough. The live model checks each route against the current target.", action: "Review the calculated options, then continue. The working source mode stays active.", watchFor: "A green option supports the current network target; unavailable routes stay marked infeasible.", result: "No mode change is needed to continue. The comparison uses the current source and HMP temperatures." },
-  { title: "THE VALUE IS IN THE SYSTEM.", copy: "Compare avoided central production cost and net operating cost at this modeled operating point. Annual savings and payback need operating hours and investment data.", action: "Compare BASELINE and CURRENT in the results table below.", watchFor: "More waste heat can reduce central production and modeled operating cost.", result: "These are calculated values for this operating point, not annual savings." }
+  { title: "The heat is already there.", copy: "An available waste-heat source sits below the network's current temperature requirement. Available energy is not necessarily usable energy.", action: "Lower the network temperature until waste heat can enter the system.", watchFor: "The waste-heat source becomes able to feed the network.", result: "Watch the source and network as you lower the temperature." },
+  { title: "Temperature-critical branches can limit the network.", copy: "Lowering the central temperature makes the source eligible in this example. Every branch below its minimum temperature needs attention.", action: "If needed, lower HMP to 80 °C, then identify every red branch in the live network.", watchFor: "Progress shows how many temperature-critical branches you have identified.", result: "Select each branch with a temperature deficit." },
+  { title: "Boost locally. Not everywhere.", copy: "Gridbooster lifts each selected branch that needs a local temperature increase. Activate one on every temperature-critical branch.", action: "On each red branch, choose + ADD GRIDBOOSTER.", watchFor: "Each installed booster appears on its branch; the count updates here.", result: "Install a GridBooster on every branch that needs local lift." },
+  { title: "Data-center options", copy: "The source can reach the current network target through some delivery routes, while others may not be warm enough. The live model checks each route against the current target.", action: "Review the calculated options, then continue. The working source mode stays active.", watchFor: "A green option supports the current network target; unavailable routes stay marked infeasible.", result: "No mode change is needed to continue. The comparison uses the current source and HMP temperatures." },
+  { title: "The value is in the system.", copy: "Compare avoided central production cost and net operating cost at this modeled operating point. Annual savings and payback need operating hours and investment data.", action: "Compare baseline and current in the results table below.", watchFor: "More waste heat can reduce central production and modeled operating cost.", result: "These are calculated values for this operating point, not annual savings." }
 ];
 const guidedDemoAdvanceDelay = 1100;
 let guidedDemoStep = 0;
@@ -846,8 +846,7 @@ function updateGuidedDemoObjective(input = readScenario()) {
   if (!active) return;
   const step = story ? guidedStoryStep + 1 : guidedDemoStep + 1;
   const title = story ? guidedStorySteps[guidedStoryStep]?.title : guidedDemoSteps[guidedDemoStep]?.title;
-  $("guided-demo-objective-step").textContent = story
-    ? `GUIDED DEMO · SIMPLE STORY · STEP ${step} OF 5` : `GUIDED DEMO · STEP ${step} OF 5`;
+  $("guided-demo-objective-step").textContent = `Step ${step} of 5`;
   $("guided-demo-objective-task").textContent = story ? title.replace(/[.]/g, "") : guidedDemoSteps[guidedDemoStep]?.action;
   const required = story ? [] : guidedDemoRequiredBranches(input);
   const count = story ? "" : guidedDemoStep === 1
@@ -930,11 +929,11 @@ function guidedOperatingCost(state, prices) {
 }
 
 const guidedStorySteps = [
-  { title: "THIS HEAT ALREADY EXISTS.", copy: "A nearby source has useful leftover heat, but it is cooler than the water the network currently needs.", prompt: "Look at the data center: its leftover heat is available before GridBooster is added." },
-  { title: "BUT SOME CUSTOMERS NEED HIGHER TEMPERATURE.", copy: "Most customers could use cooler water. One or more customers may need hotter water.", prompt: "Temperature-critical customers are highlighted in the live network." },
-  { title: "HOTTER CUSTOMERS CAN KEEP THE WHOLE NETWORK HOTTER.", copy: "If the whole network must stay hot enough for its most demanding customers, cooler waste heat can be difficult to use directly.", prompt: "Follow the highlighted customers back to the wider network." },
-  { title: "BOOST ONLY WHERE THE EXTRA TEMPERATURE IS NEEDED.", copy: "GridBooster raises the water temperature locally for temperature-critical customers, so the rest of the network can stay cooler.", prompt: "Activate GridBooster for the highlighted customer or customers." },
-  { title: "NOW THE NETWORK CAN USE MORE WASTE HEAT.", copy: "Local boosters serve the hotter customers while the wider network can use the cooler source heat in this modeled example.", prompt: "The live model shows the source and customers connected through the same network." }
+  { title: "This heat already exists.", copy: "A nearby source has useful leftover heat, but it is cooler than the water the network currently needs.", prompt: "Look at the data center: its leftover heat is available before GridBooster is added." },
+  { title: "Some customers need a higher temperature.", copy: "Most customers could use cooler water. One or more customers may need hotter water.", prompt: "Temperature-critical customers are highlighted in the live network." },
+  { title: "Hotter customers can keep the whole network hotter.", copy: "If the whole network must stay hot enough for its most demanding customers, cooler waste heat can be difficult to use directly.", prompt: "Follow the highlighted customers back to the wider network." },
+  { title: "Boost only where the extra temperature is needed.", copy: "GridBooster raises the water temperature locally for temperature-critical customers, so the rest of the network can stay cooler.", prompt: "Activate GridBooster for the highlighted customer or customers." },
+  { title: "Now the network can use more waste heat.", copy: "Local boosters serve the hotter customers while the wider network can use the cooler source heat in this modeled example.", prompt: "The live model shows the source and customers connected through the same network." }
 ];
 
 function renderGuidedStory(input) {
@@ -942,10 +941,10 @@ function renderGuidedStory(input) {
   updateGuidedDemoObjective(input);
   const root = $("guided-demo");
   root.dataset.storyStep = String(guidedStoryStep);
-  $("guided-story-step-label").textContent = `SIMPLE STORY · STEP ${guidedStoryStep + 1} OF 5`;
+  $("guided-story-step-label").textContent = `Step ${guidedStoryStep + 1} of 5`;
   $("guided-story-step-title").textContent = step.title;
   $("guided-story-step-copy").textContent = step.copy;
-  $("guided-story-prompt-label").textContent = guidedStoryStep === 3 ? "ACTION" : guidedStoryStep === 4 ? "LIVE MODEL RESULT" : "NOTICE";
+  $("guided-story-prompt-label").textContent = guidedStoryStep === 3 ? "Action" : guidedStoryStep === 4 ? "Live model result" : "Notice";
   $("guided-story-prompt").textContent = step.prompt;
   $("guided-story-feedback").textContent = "";
   $("guided-story-takeaway").hidden = guidedStoryStep !== 4;
@@ -982,7 +981,7 @@ function renderGuidedStory(input) {
 
 function renderGuidedDemo(input, result) {
   $("guided-demo-layer-label").textContent = guidedDemoLayer === "story"
-    ? "A SIMPLE STORY · LIVE NETWORK MODEL" : "GUIDED DEMO · TECHNICAL DETAILS";
+    ? "A simple story · Live network model" : "Technical explanation";
   if (guidedDemoLayer === "story") {
     renderGuidedStory(input, result);
     return;
@@ -997,7 +996,7 @@ function renderTechnicalGuidedDemo(input, result) {
   const step = guidedDemoSteps[guidedDemoStep];
   const wasteHeatUtilizedKW = Number(latestNetworkState?.withBooster?.totalWasteHeatUsedKW ?? result?.withBooster?.totalWasteHeatUsedKW ?? 0);
   const canContinueHmpStep = Number.isFinite(wasteHeatUtilizedKW) && wasteHeatUtilizedKW > 0;
-  $("guided-demo-step-label").textContent = `STEP ${guidedDemoStep + 1} OF 5`;
+  $("guided-demo-step-label").textContent = `Step ${guidedDemoStep + 1} of 5`;
   $("guided-demo-step-title").textContent = step.title;
   $("guided-demo-step-copy").textContent = step.copy;
   $("demo-action").textContent = step.action;
@@ -2242,7 +2241,7 @@ function renderFullSystem(result, input) {
     const pip3Split = pip3Customer ? `<div class="full-pip3-split" aria-label="PIP3 heat split for branch ${branch.id}"><b>PIP3</b><span class="full-pip3-metric"><small>DEMAND</small><strong>${fmt(heatSplit.demandKW / 1000, 2)} MW</strong></span><span class="full-pip3-metric"><small>RETURN HEAT</small><strong>${fmt(heatSplit.returnHeatKW / 1000, 2)} MW</strong></span><span class="full-pip3-metric"><small>SUPPLY TOP-UP</small><strong>${fmt(heatSplit.supplyTopUpKW / 1000, 2)} MW</strong></span><small class="full-pip3-inlet">RETURN IN ${fmt(consumer?.inletTempC)} °C</small></div>` : "";
     return `<article class="full-customer-column${pip3Customer ? " pip3-customer-column" : ""}${returnHeatActive ? " return-heat-intake" : ""}" data-branch="${branch.id}">
       <div class="full-branch-drop full-supply-drop" aria-hidden="true"></div>
-      <div class="branch-route-card full-branch-card${branch.boosterActive ? " booster-active" : ""}"><div class="branch-route-head"><b class="branch-flag">${branch.id}</b><strong>${escapeHtml(shortName).toUpperCase()}</strong><span class="branch-status">${status}</span>${pip3Customer && document.body.dataset.mode === "demo" ? `<button type="button" class="network-why-button" data-inspect-kind="pip3" data-i18n="interaction.why">WHY?</button>` : ""}</div><div class="branch-route-values"><b class="branch-temp">${fmt(branch.finalSupplyTemp)} °C SUPPLY</b><span>MIN ${fmt(branch.minimumSupplyTemp)} °C</span><span>LOAD ${fmt(branch.demandKW / 1000, 2)} MW</span></div>${boosters ? `<div class="full-branch-boosters" aria-label="Gridbooster installed on Branch ${branch.id}">${boosters}</div>` : ""}${pip3Split}</div>
+      <div class="branch-route-card full-branch-card${branch.boosterActive ? " booster-active" : ""}"><div class="branch-route-head"><b class="branch-flag">${branch.id}</b><strong>${escapeHtml(shortName)}</strong><span class="branch-status">${status}</span>${pip3Customer && document.body.dataset.mode === "demo" ? `<button type="button" class="network-why-button" data-inspect-kind="pip3" data-i18n="interaction.why">WHY?</button>` : ""}</div><div class="branch-route-values"><b class="branch-temp">${fmt(branch.finalSupplyTemp)} °C supply</b><span>Minimum ${fmt(branch.minimumSupplyTemp)} °C</span><span>Load ${fmt(branch.demandKW / 1000, 2)} MW</span></div>${boosters ? `<div class="full-branch-boosters" aria-label="Gridbooster installed on Branch ${branch.id}">${boosters}</div>` : ""}${pip3Split}</div>
       <div class="full-branch-drop full-return-drop" aria-hidden="true"></div>
     </article>`;
   }).join("");

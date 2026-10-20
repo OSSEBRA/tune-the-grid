@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#71d6ff">
     <title>TUNE THE GRID — District Heating Gridbooster Simulator</title>
-    <link rel="stylesheet" href="styles.css?v=20261016-4">
+    <link rel="stylesheet" href="styles.css?v=20261020-1">
   </head>
   <body data-mode="demo">
     <svg class="source-icon-definitions" aria-hidden="true" focusable="false">
@@ -41,11 +41,11 @@
       </section>
 
       <section class="mode-selector-panel" aria-label="Choose simulator difficulty and audience mode">
-        <div class="mode-selector-heading"><div><p class="eyebrow">EXPERIENCE</p><h2>CHOOSE YOUR MODE</h2></div><p>Choose the experience that fits how you want to explore the system.</p></div>
+        <div class="mode-selector-heading"><div><p class="eyebrow">EXPERIENCE</p><h2>Choose your mode</h2></div><p>Choose the experience that fits how you want to explore the system.</p></div>
         <div class="mode-selector" role="group" aria-label="Simulator mode">
-          <button id="mode-demo" class="mode-choice active" type="button" data-mode="demo" aria-pressed="true"><span>GUIDED DEMO</span><small>Plain-language story · Technical walkthrough</small></button>
-          <button id="mode-casual" class="mode-choice" type="button" data-mode="casual" aria-pressed="false"><span>CASUAL</span><small>Simplified controls · Plain language</small></button>
-          <button id="mode-engineer" class="mode-choice" type="button" data-mode="engineer" aria-pressed="false"><span>ENGINEERING MODE</span><small>Full technical simulator</small></button>
+          <button id="mode-demo" class="mode-choice active" type="button" data-mode="demo" aria-pressed="true"><span>Guided Demo</span><small>Plain-language story · Technical walkthrough</small></button>
+          <button id="mode-casual" class="mode-choice" type="button" data-mode="casual" aria-pressed="false"><span>Casual</span><small>Simplified controls · Plain language</small></button>
+          <button id="mode-engineer" class="mode-choice" type="button" data-mode="engineer" aria-pressed="false"><span>Engineering Mode</span><small>Full technical simulator</small></button>
           <button id="mode-consult" class="mode-choice" type="button" data-mode="consult" aria-pressed="false" hidden><span>CONSULT</span><small>Consultancy analysis</small></button>
         </div>
       </section>
@@ -55,18 +55,18 @@
       </aside>
 
       <section id="guided-demo" class="guided-demo panel" aria-labelledby="guided-demo-title">
-        <header class="guided-demo-heading"><div><p id="guided-demo-layer-label" class="eyebrow">A SIMPLE STORY · LIVE NETWORK MODEL</p><h2 id="guided-demo-title">See how GridBooster unlocks waste heat</h2></div><span class="pixel-tag">2 LAYERS</span></header>
+        <header class="guided-demo-heading"><div><p id="guided-demo-layer-label" class="eyebrow">A simple story · Live network model</p><h2 id="guided-demo-title">See how GridBooster unlocks waste heat</h2></div><span class="pixel-tag">2 LAYERS</span></header>
         <div id="guided-demo-network" class="guided-demo-network" aria-label="Live network supporting the current Guided Demo step">
           <aside id="guided-demo-objective" class="guided-demo-objective" aria-live="polite">
-            <div><p id="guided-demo-objective-step">GUIDED DEMO · SIMPLE STORY · STEP 1</p><b id="guided-demo-objective-task">See the available waste heat</b><span id="guided-demo-objective-progress"></span></div>
+            <div><p id="guided-demo-objective-step">Step 1 of 5</p><b id="guided-demo-objective-task">See the available waste heat</b><span id="guided-demo-objective-progress"></span></div>
             <button id="guided-demo-scroll-cue" type="button" hidden>CONTINUE BELOW ↓</button>
           </aside>
         </div>
         <div id="guided-demo-story-layer" class="guided-demo-story-layer">
-          <p id="guided-story-step-label" class="eyebrow">SIMPLE STORY · STEP 1 OF 5</p>
+          <p id="guided-story-step-label" class="eyebrow">Step 1 of 5</p>
           <h3 id="guided-story-step-title"></h3>
           <p id="guided-story-step-copy" class="guided-story-copy"></p>
-          <div class="guided-story-prompt"><b id="guided-story-prompt-label">NOTICE</b><p id="guided-story-prompt"></p></div>
+          <div class="guided-story-prompt"><b id="guided-story-prompt-label">Notice</b><p id="guided-story-prompt"></p></div>
           <p id="guided-story-feedback" class="guided-story-feedback" role="status" aria-live="polite"></p>
           <p id="guided-story-takeaway" class="guided-story-takeaway" hidden></p>
           <div class="guided-story-footer">
@@ -84,13 +84,13 @@
         </div>
         <div class="guided-demo-content"><div class="guided-demo-story"><p id="guided-demo-step-label" class="eyebrow">STEP 1 OF 5</p><h3 id="guided-demo-step-title"></h3><p id="guided-demo-step-copy"></p>
           <div class="guided-interactions">
-            <div class="guided-demo-instructions"><section class="guided-demo-action"><b>NEXT ACTION</b><p id="demo-action"></p><small id="guided-demo-progress-count" class="guided-demo-progress-count" aria-live="polite"></small></section><section class="guided-demo-watch"><b>WATCH FOR</b><p id="demo-watch-for"></p></section></div>
+            <div class="guided-demo-instructions"><section class="guided-demo-action"><b>Next action</b><p id="demo-action"></p><small id="guided-demo-progress-count" class="guided-demo-progress-count" aria-live="polite"></small></section><section class="guided-demo-watch"><b>Watch for</b><p id="demo-watch-for"></p></section></div>
             <label for="demo-hmp-control" data-i18n="interaction.tune_hmp">TUNE THE GRID. HMP TARGET</label>
             <div><input id="demo-hmp-control" type="range" min="70" max="95" step="1" aria-label="HMP target temperature"><output id="demo-hmp-value">90 °C</output></div>
             <div id="guided-demo-hmp-navigation" class="guided-demo-hmp-navigation" hidden></div>
             <button id="demo-comparison-toggle" type="button" aria-pressed="false" data-i18n="interaction.show_current">WITHOUT GRIDBOOSTER</button>
             <button id="guided-demo-activate" class="guided-demo-activate" type="button" hidden data-i18n="interaction.place_gridbooster">PLACE GRIDBOOSTER ON SELECTED BRANCH</button>
-            <div class="guided-demo-feedback"><b>SYSTEM FEEDBACK</b><p id="demo-branch-feedback" role="status" aria-live="polite"></p></div>
+            <div class="guided-demo-feedback"><b>System feedback</b><p id="demo-branch-feedback" role="status" aria-live="polite"></p></div>
             <section id="guided-demo-source-options" class="guided-demo-source-options" hidden aria-label="Calculated data center options"></section>
           </div>
           <p id="guided-demo-assumption" class="demo-assumption"></p><p id="guided-demo-status" class="guided-demo-status" role="status" aria-live="polite"></p></div>
@@ -560,6 +560,6 @@
     </main>
     <script type="module" src="translations.js?v=20261014-2"></script>
     <script type="module" src="app.js?v=20261011-2"></script>
-    <script type="module" src="network-app.js?v=20261016-3"></script>
+    <script type="module" src="network-app.js?v=20261020-1"></script>
   </body>
 </html>

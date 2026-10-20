@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gridbooster validation dataset",
+  "description": "Data contract for a future documented comparison import. This file defines no external API or connection.",
+  "type": "object",
+  "required": ["schemaVersion", "datasetId", "provenance", "scenario", "results"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "datasetId": { "type": "string", "minLength": 1 },
+    "provenance": {
+      "type": "object",
+      "required": ["status", "organization", "reference"],
+      "properties": {
+        "status": { "enum": ["illustrative", "calculated", "externally_validated", "field_measured"] },
+        "organization": { "type": "string", "minLength": 1 },
+        "reference": { "type": "string", "minLength": 1 },
+        "recordedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "scenario": {
+      "type": "object",
+      "required": ["site", "networkConditions", "assumptions"],
+      "properties": {
+        "site": { "type": "string" },
+        "networkConditions": { "type": "object", "description": "Shared demand, weather, source availability and operating period for the compared cases." },
+        "assumptions": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["case", "metric", "value", "unit"],
+        "properties": {
+          "case": { "enum": ["baseline", "optimized"] },
+          "metric": { "type": "string", "minLength": 1 },
+          "value": { "type": "number" },
+          "unit": { "type": "string", "minLength": 1 },
+          "period": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
