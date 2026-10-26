@@ -4,8 +4,9 @@ export const KW_PER_M3H_K = WATER_DENSITY * WATER_CP / 3600;
 
 export function validateInputs(input) {
   const errors = [];
-  const finite = ["totalFlow", "inletTemp", "targetTemp", "boostFlow", "boostOutlet", "cop"];
+  const finite = ["totalFlow", "inletTemp", "boostFlow", "boostOutlet", "cop"];
   for (const key of finite) if (input[key] === "" || !Number.isFinite(Number(input[key]))) errors.push(`${key} must be a number.`);
+  if (input.targetTemp !== "" && input.targetTemp != null && !Number.isFinite(Number(input.targetTemp))) errors.push("targetTemp must be a number when provided.");
   if (input.sourceTemp !== "" && input.sourceTemp != null && !Number.isFinite(Number(input.sourceTemp))) errors.push("Source-side inlet must be a number when provided.");
   if (errors.length) return errors;
   const total = Number(input.totalFlow), boost = Number(input.boostFlow), inlet = Number(input.inletTemp), outlet = Number(input.boostOutlet), cop = Number(input.cop);
@@ -13,7 +14,7 @@ export function validateInputs(input) {
   if (boost < 0) errors.push("Boosted flow cannot be negative.");
   if (boost > total) errors.push("Boosted flow cannot exceed total network flow.");
   if (cop <= 1) errors.push("COP must be greater than 1.");
-  if (outlet < inlet) errors.push("Booster outlet must be at or above network supply temperature.");
+  if (outlet < inlet) errors.push("GridBooster outlet must be at or above incoming network supply.");
   if (input.sourceTemp !== "" && input.sourceTemp != null && Number(input.sourceTemp) >= outlet) errors.push("Source-side inlet must be below booster outlet temperature.");
   return errors;
 }

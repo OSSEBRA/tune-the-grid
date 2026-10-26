@@ -1,7 +1,8 @@
-import { simulateNetwork, calculateTemperatureFlexSweep, summarizeNetworkFlexState, calculateOperatingCost, lowestSupportedPoint, isReturnSourceAvailableToConsumer, calculatePip3HeatSplit, MAX_PIP3_BRANCHES } from "./network-model.js?v=20261014-1";
-import { analyzeSystemOpportunity, calculateOpportunityIntervention, calculateMarginalTemperature, calculateSourceTemperatureIntervention, clearScenarioSlot, compareScenarioSnapshots, restoreScenarioSnapshot, saveScenarioSlot, selectCasualSystemGuidance } from "./network-insights.js?v=20261014-2";
-import { buildSensitivityValues, calculateKeySensitivities, calculateSensitivitySweep, createSensitivitySpec, summarizeSensitivitySweep } from "./network-sensitivity.js?v=20261014-1";
-import { createAnnualProfile, createOperatingBin, duplicateAnnualProfile, updateOperatingBin, calculateAnnualProfile, compareAnnualProfiles, calculateBusinessCase } from "./annual-analysis.js?v=20261014-1";
+import { simulateNetwork, calculateTemperatureFlexSweep, summarizeNetworkFlexState, calculateOperatingCost, lowestSupportedPoint, isReturnSourceAvailableToConsumer, calculatePip3HeatSplit, MAX_PIP3_BRANCHES } from "./network-model.js?v=20261023-1";
+import { analyzeSystemOpportunity, calculateOpportunityIntervention, calculateMarginalTemperature, calculateSourceTemperatureIntervention, clearScenarioSlot, compareScenarioSnapshots, restoreScenarioSnapshot, saveScenarioSlot, selectCasualSystemGuidance } from "./network-insights.js?v=20261023-1";
+import { buildSensitivityValues, calculateKeySensitivities, calculateSensitivitySweep, createSensitivitySpec, summarizeSensitivitySweep } from "./network-sensitivity.js?v=20261023-1";
+import { createAnnualProfile, createOperatingBin, duplicateAnnualProfile, updateOperatingBin, calculateAnnualProfile, compareAnnualProfiles, calculateBusinessCase } from "./annual-analysis.js?v=20261023-1";
+import { isPerfectOperatingPoint, didImproveSurplusChallenge, captureSurplusChallengeBaseline, isCoolingTowerWellLoaded, shouldTriggerAmbientEgg, extremeHmpBand, isGreenhouseHealthy } from "./engineering-easter-eggs.js?v=20261024-1";
 
 const $ = id => {
   const element = document.getElementById(id);
@@ -35,21 +36,21 @@ const translate = (key, params) => globalThis.window?.t?.(key, params) ?? key;
 const branchName = branch => globalThis.window?.t?.(`branch.name.${branch.id.toLowerCase()}`) || branch.name;
 const scenarios = [
   { name: "1 — Conventional High-Temperature Grid", description: "The network works, but its high operating temperature blocks both available waste-heat sources.", purpose: "scenario.demo1.purpose", whatToTry: ["scenario.demo1.try1", "scenario.demo1.try2", "scenario.demo1.try3"], hmp: 90, outdoor: 2, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 2, industrialTemp: 78, industrialPower: 1.5, industrialAvailability: 100, industrialLoss: 1, dcMode: "one-stage", branch: "none", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 40, referenceNetworkDeltaK: null, gridBoosters: [], branchProfile: { A: { minimumSupplyTemp: 85 }, B: { minimumSupplyTemp: 79 }, C: { minimumSupplyTemp: 74 }, D: { minimumSupplyTemp: 70 }, E: { minimumSupplyTemp: 77 }, F: { minimumSupplyTemp: 68 } } },
-  { name: "2 — Unlock Industrial Waste Heat", description: "Lowering HMP unlocks direct industrial heat; Branch A then needs a local temperature lift.", purpose: "scenario.demo2.purpose", whatToTry: ["scenario.demo2.try1", "scenario.demo2.try2", "scenario.demo2.try3"], hmp: 77, outdoor: 0, plantTemp: 95, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 1.5, industrialTemp: 78, industrialPower: 1.5, industrialAvailability: 100, industrialLoss: 1, dcMode: "one-stage", branch: "A", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 40, referenceNetworkDeltaK: null, gridBoosters: [{ id: "GB-1", branchId: "A", mode: "target", targetTemp: 85, liftK: 0, cop: 3, maxThermalKW: 2000 }], branchProfile: { A: { minimumSupplyTemp: 85, lossToBranch: 2 }, B: { minimumSupplyTemp: 76 }, C: { minimumSupplyTemp: 74 }, D: { minimumSupplyTemp: 70 }, E: { minimumSupplyTemp: 75 }, F: { minimumSupplyTemp: 68 } } },
-  { name: "3 — Upgrade Data-Center Waste Heat", description: "Compare raw, one-stage and two-stage delivery to see how heat-pump upgrading changes source eligibility and central production.", purpose: "scenario.demo3.purpose", whatToTry: ["scenario.demo3.try1", "scenario.demo3.try2", "scenario.demo3.try3"], hmp: 82, outdoor: 4, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 50, dcPower: 5, dcAvailability: 100, dcLoss: 2, industrialTemp: 79, industrialPower: 0.5, industrialAvailability: 100, industrialLoss: 1, dcMode: "two-stage", branch: "none", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 40, referenceNetworkDeltaK: null, gridBoosters: [], branchProfile: { A: { minimumSupplyTemp: 80 }, B: { minimumSupplyTemp: 76 }, C: { minimumSupplyTemp: 74 }, D: { minimumSupplyTemp: 70 }, E: { minimumSupplyTemp: 76 }, F: { minimumSupplyTemp: 68 } } },
-  { name: "4 — Local Gridbooster Strategy", description: "Keep HMP low to use both waste-heat sources while locally boosting only selected high-temperature branches.", purpose: "scenario.demo4.purpose", whatToTry: ["scenario.demo4.try1", "scenario.demo4.try2", "scenario.demo4.try3"], hmp: 74, outdoor: -4, plantTemp: 95, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 2, industrialTemp: 78, industrialPower: 2, industrialAvailability: 100, industrialLoss: 1, dcMode: "two-stage", branch: "A", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 40, referenceNetworkDeltaK: null, gridBoosters: [{ id: "GB-1", branchId: "A", mode: "target", targetTemp: 85, liftK: 0, cop: 3, maxThermalKW: 2000 }], branchProfile: { A: { minimumSupplyTemp: 85, lossToBranch: 2 }, B: { minimumSupplyTemp: 79, lossToBranch: 1 }, C: { minimumSupplyTemp: 73, lossToBranch: 1 }, D: { minimumSupplyTemp: 70, lossToBranch: 2 }, E: { minimumSupplyTemp: 77, lossToBranch: 1 }, F: { minimumSupplyTemp: 68, lossToBranch: 2 } } },
-  { name: "5 — Return Heat / PIP3 Network", description: "Return heat is useful only when the source is upstream in the flow direction and hot enough for a PIP3 branch.", purpose: "scenario.demo5.purpose", whatToTry: ["scenario.demo5.try1", "scenario.demo5.try2", "scenario.demo5.try3"], hmp: 90, outdoor: 2, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 1.5, industrialTemp: 68, industrialPower: 0.8, industrialAvailability: 90, industrialLoss: 2, dcMode: "raw-return", branch: "none", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 43, returnFlowM3h: 500, referenceNetworkDeltaK: null, dcReturnOrder: 5, smOrder: 25, supermarketEnabled: true, supermarketSourceTempC: 49, supermarketPowerKW: 3500, gridBoosters: [], returnHeatDemo: true, pip3: { B: { order: 60, maxReturnShare: 40, minimumUsableTempC: 45 }, E: { order: 30, maxReturnShare: 100, minimumUsableTempC: 44 }, F: { order: 20, maxReturnShare: 70, minimumUsableTempC: 46 } } },
-  { name: "6 — Multi-Level Waste Heat System", description: "Use each source at its useful temperature level, then distribute eligible surplus heat to Greenhouse and Absorption Cooling.", purpose: "scenario.demo6.purpose", whatToTry: ["scenario.demo6.try1", "scenario.demo6.try2", "scenario.demo6.try3"], hmp: 80, outdoor: 2, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 1.5, industrialTemp: 82, industrialPower: 2, industrialAvailability: 100, industrialLoss: 1, dcMode: "two-stage", branch: "A", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 43, returnFlowM3h: 500, referenceNetworkDeltaK: null, dcReturnOrder: 5, smOrder: 25, supermarketEnabled: true, supermarketSourceTempC: 49, supermarketPowerKW: 3800, gridBoosters: [{ id: "GB-1", branchId: "A", mode: "target", targetTemp: 85, liftK: 0, cop: 3, maxThermalKW: 2000 }], returnHeatDemo: true, multiLevelWasteHeatDemo: true, pip3: { D: { order: 40, maxReturnShare: 40, minimumUsableTempC: 45 }, E: { order: 30, maxReturnShare: 100, minimumUsableTempC: 44 }, F: { order: 20, maxReturnShare: 70, minimumUsableTempC: 46 } }, branchProfile: { A: { minimumSupplyTemp: 85, lossToBranch: 1 }, B: { minimumSupplyTemp: 78 }, C: { minimumSupplyTemp: 74 }, D: { minimumSupplyTemp: 70 }, E: { minimumSupplyTemp: 76 }, F: { minimumSupplyTemp: 68 } } }
+  { name: "2 — Upgrade Data-Center Waste Heat", description: "Compare raw, one-stage and two-stage delivery to see how heat-pump upgrading changes source eligibility and central production.", purpose: "scenario.demo2.purpose", whatToTry: ["scenario.demo2.try1", "scenario.demo2.try2", "scenario.demo2.try3"], hmp: 82, outdoor: 4, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 50, dcPower: 5, dcAvailability: 100, dcLoss: 2, industrialTemp: 79, industrialPower: 0.5, industrialAvailability: 100, industrialLoss: 1, dcMode: "two-stage", branch: "none", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 40, referenceNetworkDeltaK: null, gridBoosters: [], branchProfile: { A: { minimumSupplyTemp: 80 }, B: { minimumSupplyTemp: 76 }, C: { minimumSupplyTemp: 74 }, D: { minimumSupplyTemp: 70 }, E: { minimumSupplyTemp: 76 }, F: { minimumSupplyTemp: 68 } } },
+  { name: "3 — Local Gridbooster Strategy", description: "Keep HMP low to use both waste-heat sources while locally boosting only selected high-temperature branches.", purpose: "scenario.demo3.purpose", whatToTry: ["scenario.demo3.try1", "scenario.demo3.try2", "scenario.demo3.try3"], hmp: 74, outdoor: -4, plantTemp: 95, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 2, industrialTemp: 78, industrialPower: 2, industrialAvailability: 100, industrialLoss: 1, dcMode: "two-stage", branch: "A", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 40, referenceNetworkDeltaK: null, gridBoosters: [{ id: "GB-1", branchId: "A", mode: "target", targetTemp: 85, liftK: 0, cop: 3, maxThermalKW: 2000 }], branchProfile: { A: { minimumSupplyTemp: 85, lossToBranch: 2 }, B: { minimumSupplyTemp: 79, lossToBranch: 1 }, C: { minimumSupplyTemp: 73, lossToBranch: 1 }, D: { minimumSupplyTemp: 70, lossToBranch: 2 }, E: { minimumSupplyTemp: 77, lossToBranch: 1 }, F: { minimumSupplyTemp: 68, lossToBranch: 2 } } },
+  { name: "4 — Return Heat / PIP3 Network", description: "Return heat is useful only when the source is upstream in the flow direction and hot enough for a PIP3 branch.", purpose: "scenario.demo4.purpose", whatToTry: ["scenario.demo4.try1", "scenario.demo4.try2", "scenario.demo4.try3"], hmp: 90, outdoor: 2, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 1.5, industrialTemp: 68, industrialPower: 0.8, industrialAvailability: 90, industrialLoss: 2, dcMode: "raw-return", branch: "none", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 43, returnFlowM3h: 500, referenceNetworkDeltaK: null, dcReturnOrder: 5, smOrder: 25, supermarketEnabled: true, supermarketSourceTempC: 49, supermarketPowerKW: 3500, gridBoosters: [], returnHeatDemo: true, pip3: { B: { order: 60, maxReturnShare: 40, minimumUsableTempC: 45 }, E: { order: 30, maxReturnShare: 100, minimumUsableTempC: 44 }, F: { order: 20, maxReturnShare: 70, minimumUsableTempC: 46 } } },
+  { name: "5 — Multi-Level Waste Heat System", description: "A reasonably configured multi-source system uses heat at its useful temperature level and sends eligible surplus to Flexible Heat Sinks.", purpose: "scenario.demo5.purpose", whatToTry: ["scenario.demo5.try1", "scenario.demo5.try2", "scenario.demo5.try3"], hmp: 80, outdoor: 2, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 1.5, industrialTemp: 82, industrialPower: 2, industrialAvailability: 100, industrialLoss: 1, dcMode: "two-stage", branch: "A", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 43, returnFlowM3h: 500, referenceNetworkDeltaK: null, dcReturnOrder: 5, smOrder: 25, supermarketEnabled: true, supermarketSourceTempC: 49, supermarketPowerKW: 3800, gridBoosters: [{ id: "GB-1", branchId: "A", mode: "target", targetTemp: 85, liftK: 0, cop: 3, maxThermalKW: 2000 }], returnHeatDemo: true, multiLevelWasteHeatDemo: true, pip3: { D: { order: 40, maxReturnShare: 40, minimumUsableTempC: 45 }, E: { order: 30, maxReturnShare: 100, minimumUsableTempC: 44 }, F: { order: 20, maxReturnShare: 70, minimumUsableTempC: 46 } }, branchProfile: { A: { minimumSupplyTemp: 85, lossToBranch: 1 }, B: { minimumSupplyTemp: 78 }, C: { minimumSupplyTemp: 74 }, D: { minimumSupplyTemp: 70 }, E: { minimumSupplyTemp: 76 }, F: { minimumSupplyTemp: 68 } } },
+  { name: "6 — Surplus Heat Challenge", description: "A low-demand operating point has more useful waste heat available than the network currently absorbs. Find a better balance between network temperature, source upgrading, local Gridboosting, return heat and flexible heat sinks.", purpose: "scenario.demo6.purpose", whatToTry: ["scenario.demo6.try1", "scenario.demo6.try2", "scenario.demo6.try3"], hmp: 80, outdoor: 17, plantTemp: 98, plantPower: 15, plantAvailability: 100, plantLoss: 2, dcTemp: 60, dcPower: 5, dcAvailability: 100, dcLoss: 1.5, industrialTemp: 82, industrialPower: 1.5, industrialAvailability: 100, industrialLoss: 1, dcMode: "raw-return", branch: "A", mode: "target", setpoint: 85, cop: 3, capacity: 2000, singleTemp: 75, singleCOP: 3, stage1Temp: 70, stage1COP: 3, stage2Temp: 85, stage2COP: 3, networkReturnTemp: 43, returnFlowM3h: 500, referenceNetworkDeltaK: null, dcReturnOrder: 5, smOrder: 25, supermarketEnabled: true, supermarketSourceTempC: 53, supermarketPowerKW: 3800, gridBoosters: [{ id: "GB-1", branchId: "A", mode: "target", targetTemp: 85, liftK: 0, cop: 3, maxThermalKW: 1800 }], returnHeatDemo: true, pip3: { D: { order: 40, maxReturnShare: 40, minimumUsableTempC: 45 }, E: { order: 30, maxReturnShare: 100, minimumUsableTempC: 44 }, F: { order: 20, maxReturnShare: 70, minimumUsableTempC: 46 } }, branchProfile: { A: { demandKW: 1400, minimumSupplyTemp: 85 }, B: { demandKW: 1100, minimumSupplyTemp: 78 }, C: { demandKW: 1200, minimumSupplyTemp: 74 }, D: { demandKW: 900, minimumSupplyTemp: 70 }, E: { demandKW: 1100, minimumSupplyTemp: 76 }, F: { demandKW: 800, minimumSupplyTemp: 68 } }, greenhouse: { enabled: true, maxDemandKW: 700, minimumTemperatureC: 50, connectionMode: "auto" }, absorptionCooling: { enabled: true, maxHeatInputKW: 500, minimumDrivingTempC: 80, thermalCOP: 0.72 } }
 ];
 Object.assign(scenarios[0], { wastewaterTemp: 80, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1 });
-Object.assign(scenarios[1], { wastewaterTemp: 80, wastewaterPower: 0.2, wastewaterAvailability: 100, wastewaterLoss: 1 });
+Object.assign(scenarios[1], { wastewaterTemp: 80, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1 });
 Object.assign(scenarios[2], { wastewaterTemp: 80, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1 });
 Object.assign(scenarios[3], { wastewaterTemp: 80, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1 });
-Object.assign(scenarios[4], { wastewaterTemp: 80, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1 });
-Object.assign(scenarios[5], { wastewaterTemp: 82, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1,
+Object.assign(scenarios[4], { wastewaterTemp: 82, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1,
   supermarketSourceTempC: 53,
   greenhouse: { enabled: true, maxDemandKW: 1500, minimumTemperatureC: 50, connectionMode: "auto" },
   absorptionCooling: { enabled: true, maxHeatInputKW: 800, minimumDrivingTempC: 80, thermalCOP: 0.7 } });
+Object.assign(scenarios[5], { wastewaterTemp: 82, wastewaterPower: 2.5, wastewaterAvailability: 100, wastewaterLoss: 1 });
 const branchControls = $("branch-controls");
 const scenarioSelect = $("scenario-select");
 const branchInputs = new Map();
@@ -63,6 +64,14 @@ let casualPriorNetworkView = "supply";
 let casualPriorPrices = null;
 let casualSliderHome = null;
 let casualBoosterHome = null;
+let activeScenarioIndex = 0;
+let demo6Baseline = null;
+let demo6ImprovementFired = false;
+let perfectOperatingPointActive = false;
+let supermarketClickCount = 0;
+let supermarketClickTimer = null;
+let supermarketDraggedAt = 0;
+let supermarketEggBubbleTimer = null;
 let selectedPip3Branch = "D";
 let supermarketTopologySelected = false;
 let bottleneckFound = false;
@@ -85,6 +94,173 @@ let annualAnalysis = null;
 let annualProfileChanged = true;
 let annualBinSequence = 1;
 const set = (id, value) => { $(id).textContent = value; };
+let engineeringEasterEggTimer = null;
+let engineeringEasterEggQueue = [];
+let activeEngineeringEasterEgg = null;
+let demo6ImprovementPulseTimer = null;
+let ambientHmpBand = "";
+let absorptionCoolingEligible = false;
+let greenhouseHealthy = false;
+function showEngineeringEasterEgg(primary, secondary = "", kind = "ambient", duration = 7200) {
+  if (document.body.dataset.mode !== "engineer") return;
+  const notice = { primary, secondary, kind, duration };
+  if (activeEngineeringEasterEgg) {
+    if (kind === "achievement" && activeEngineeringEasterEgg.kind === "ambient") {
+      clearTimeout(engineeringEasterEggTimer);
+      activeEngineeringEasterEgg = null;
+    } else {
+      if (!engineeringEasterEggQueue.some(item => item.primary === primary)) engineeringEasterEggQueue.push(notice);
+      return;
+    }
+  }
+  presentEngineeringEasterEgg(notice);
+}
+function presentEngineeringEasterEgg(notice) {
+  const toast = $("engineering-easter-notice");
+  activeEngineeringEasterEgg = notice;
+  set("engineering-easter-primary", notice.primary);
+  set("engineering-easter-secondary", notice.secondary);
+  $("engineering-easter-secondary").hidden = !notice.secondary;
+  $("engineering-easter-dismiss").hidden = notice.kind !== "achievement";
+  toast.dataset.kind = notice.kind;
+  toast.hidden = false;
+  toast.classList.add("is-visible");
+  clearTimeout(engineeringEasterEggTimer);
+  engineeringEasterEggTimer = setTimeout(dismissEngineeringEasterEgg, notice.duration);
+}
+function dismissEngineeringEasterEgg() {
+  clearTimeout(engineeringEasterEggTimer);
+  const toast = $("engineering-easter-notice");
+  toast.classList.remove("is-visible");
+  toast.hidden = true;
+  activeEngineeringEasterEgg = null;
+  engineeringEasterEggTimer = null;
+  const next = engineeringEasterEggQueue.shift();
+  if (next) presentEngineeringEasterEgg(next);
+}
+
+function updateEngineeringEasterEggs(result, input, prices) {
+  const engineering = document.body.dataset.mode === "engineer";
+  const after = result.withBooster;
+  const metrics = summarizeNetworkFlexState(result, input, prices);
+  const perfect = engineering && isPerfectOperatingPoint({ centralHeatKW: after.centralPlantUsedKW,
+    curtailedHeatKW: metrics.curtailedHeatKW, feasibleBranches: after.feasibleAfterCount, branchCount: after.afterBranches.length });
+  $("perfect-operating-point-badge").hidden = !perfect;
+  for (const id of ["hmp-node", "full-hmp-node"]) $(id).classList.toggle("perfect-operating-point", perfect);
+  if (perfect && !perfectOperatingPointActive) showEngineeringEasterEgg("SUSPICIOUSLY GOOD ENGINEERING.", "All branches supported · central production and useful heat curtailment at zero.", "achievement", 9000);
+  perfectOperatingPointActive = perfect;
+
+  const demo6 = engineering && activeScenarioIndex === 5;
+  const centralHeatKW = after.centralPlantUsedKW;
+  const improved = demo6 && didImproveSurplusChallenge(demo6Baseline, { operatingCostPerHour: metrics.operatingCostPerHour,
+    curtailedHeatKW: metrics.curtailedHeatKW, centralHeatKW });
+  $("demo6-improvement-marker").hidden = !improved;
+  $("current-strategy-strip").classList.toggle("demo6-achievement-active", improved);
+  for (const id of ["hmp-node", "full-hmp-node", "hmp-system-card"])
+    $(id).classList.toggle("demo6-achievement-active", improved);
+  if (improved && !demo6ImprovementFired) {
+    demo6ImprovementFired = true;
+    showEngineeringEasterEgg("YOU MAY ACTUALLY KNOW WHAT YOU’RE DOING.", "Baseline has been personally offended.", "achievement", 9000);
+    const snapshot = $("current-strategy-strip");
+    snapshot.classList.add("demo6-improvement-pulse");
+    const feedback = [
+      ["snapshot-cost", "snapshot-cost-improvement", demo6Baseline.operatingCostPerHour, metrics.operatingCostPerHour, value => `${fmt(value, 2)} €/h`],
+      ["snapshot-curtailed", "snapshot-curtailed-improvement", demo6Baseline.curtailedHeatKW, metrics.curtailedHeatKW, value => `${fmt(value / 1000, 2)} MW`],
+      ["snapshot-central", "snapshot-central-improvement", demo6Baseline.centralHeatKW, centralHeatKW, value => `${fmt(value / 1000, 2)} MW`]
+    ];
+    for (const [metricId, detailId, baselineValue, currentValue, format] of feedback) {
+      const metric = $(metricId), detail = $(detailId);
+      metric.classList.add("demo6-kpi-improved");
+      detail.textContent = `BASELINE ${format(baselineValue)} → NOW ${format(currentValue)}`;
+      detail.hidden = false;
+    }
+    clearTimeout(demo6ImprovementPulseTimer);
+    demo6ImprovementPulseTimer = setTimeout(() => {
+      snapshot.classList.remove("demo6-improvement-pulse");
+      for (const [metricId, detailId] of [["snapshot-cost", "snapshot-cost-improvement"], ["snapshot-curtailed", "snapshot-curtailed-improvement"], ["snapshot-central", "snapshot-central-improvement"]]) {
+        $(metricId).classList.remove("demo6-kpi-improved");
+        $(detailId).hidden = true;
+      }
+    }, 2600);
+  }
+
+  const sinks = after.flexibleSinks;
+  const coolingMaxKW = Number(input.flexibleSinks.absorptionCooling.maxHeatInputKW);
+  const coolingWellLoaded = engineering && isCoolingTowerWellLoaded({ enabled: input.flexibleSinks.absorptionCooling.enabled,
+    status: sinks.absorptionCooling.status, heatInputKW: sinks.absorptionCooling.heatInputKW, maxHeatInputKW: coolingMaxKW });
+  if (shouldTriggerAmbientEgg(coolingWellLoaded, absorptionCoolingEligible, Date.now(), 0))
+    showEngineeringEasterEgg("COOLING TOWER IS DOING ITS BEST.", "THERMAL INPUT HIGH · COOLING DUTY ACTIVE", "ambient", 7200);
+  absorptionCoolingEligible = coolingWellLoaded;
+
+  const greenhouseMaxKW = Number(input.flexibleSinks.greenhouse.maxDemandKW);
+  const greenhouseHealthyNow = engineering && isGreenhouseHealthy({ enabled: input.flexibleSinks.greenhouse.enabled,
+    status: sinks.greenhouse.status, totalHeatKW: sinks.greenhouse.totalHeatKW, maxDemandKW: greenhouseMaxKW });
+  if (shouldTriggerAmbientEgg(greenhouseHealthyNow, greenhouseHealthy, Date.now(), 0)) {
+    showEngineeringEasterEgg("THE GREENHOUSE APPROVES.", "Photosynthesis department reports excellent conditions.", "ambient", 7200);
+  }
+  greenhouseHealthy = greenhouseHealthyNow;
+
+  const hmpBand = engineering ? extremeHmpBand(input.hmpTargetTemp) : "";
+  if (hmpBand && hmpBand !== ambientHmpBand) {
+    const message = hmpBand === "high" ? "THE PIPES HAVE FILED A COMPLAINT." : "EVERYONE WOULD LIKE A WORD.";
+    showEngineeringEasterEgg(message, "", "ambient", 7200);
+  }
+  ambientHmpBand = hmpBand;
+  applyAmbientVisualStates(hmpBand, greenhouseHealthyNow, coolingWellLoaded);
+}
+
+function applyAmbientVisualStates(hmpBand = ambientHmpBand, healthy = greenhouseHealthy, cooling = absorptionCoolingEligible) {
+  for (const id of ["hmp-node", "full-hmp-node", "hmp-system-card"]) {
+    const node = $(id);
+    node.classList.toggle("hmp-extreme-high", hmpBand === "high");
+    node.classList.toggle("hmp-extreme-low", hmpBand === "low");
+  }
+  $("full-greenhouse").classList.toggle("greenhouse-healthy", healthy);
+  $("full-absorption").classList.toggle("cooling-high-load", cooling);
+  const sinkCards = $("summary-flexible-sinks").children;
+  sinkCards[0]?.classList.toggle("greenhouse-healthy", healthy);
+  sinkCards[1]?.classList.toggle("cooling-high-load", cooling);
+}
+
+function countSupermarketClicks(event) {
+  if (document.body.dataset.mode !== "engineer" || !(event.detail > 0) || Date.now() - supermarketDraggedAt < 700) return;
+  supermarketClickCount += 1;
+  clearTimeout(supermarketClickTimer);
+  if (supermarketClickCount >= 5) {
+    supermarketClickCount = 0;
+    const card = $("full-sm-node");
+    const bubble = $("supermarket-egg-bubble");
+    if (bubble.parentElement !== document.body) document.body.append(bubble);
+    bubble.hidden = false;
+    bubble.classList.add("is-visible");
+    positionSupermarketEggBubble();
+    clearTimeout(supermarketEggBubbleTimer);
+    supermarketEggBubbleTimer = setTimeout(() => { bubble.classList.remove("is-visible"); bubble.hidden = true; }, 7000);
+    card.classList.add("supermarket-irritated");
+    setTimeout(() => card.classList.remove("supermarket-irritated"), 600);
+  } else {
+    supermarketClickTimer = setTimeout(() => { supermarketClickCount = 0; }, 1800);
+  }
+}
+
+function positionSupermarketEggBubble() {
+  const card = $("full-sm-node"), bubble = $("supermarket-egg-bubble");
+  if (!card || !bubble || bubble.hidden || typeof card.getBoundingClientRect !== "function") return;
+  const rect = card.getBoundingClientRect();
+  if (!rect.width) return;
+  const viewportWidth = document.documentElement?.clientWidth || window.innerWidth || 0;
+  const halfWidth = (bubble.offsetWidth || 260) / 2;
+  const center = Math.max(halfWidth + 8, Math.min(viewportWidth - halfWidth - 8, rect.left + rect.width / 2));
+  const top = Math.max(8, rect.top - (bubble.offsetHeight || 52) - 10);
+  bubble.style.left = `${center}px`;
+  bubble.style.top = `${top}px`;
+}
+
+if (typeof window.addEventListener === "function") {
+  window.addEventListener("resize", positionSupermarketEggBubble);
+  window.addEventListener("scroll", positionSupermarketEggBubble, true);
+}
+
 const svgNode = (svg, tag, attrs = {}, text = "") => {
   const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
   for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
@@ -214,9 +390,18 @@ branchControls.addEventListener("input", event => {
 });
 updatePip3Controls();
 let languageBranchNames = new Map(branchDefaults.map(branch => [branch.id, branchName(branch)]));
-document.addEventListener?.("click", event => {
-  if (!event.target?.closest?.("[data-language-code]")) return;
+document.addEventListener?.("app-language-change", () => {
   queueMicrotask(() => {
+    const scenarioKeys = ["one", "two", "three", "four", "five", "six"];
+    for (const [index, key] of scenarioKeys.entries()) {
+      const option = scenarioSelect.options[index];
+      if (option) option.textContent = translate(`scenario.name.${key}`);
+    }
+    const scenario = scenarios[activeScenarioIndex];
+    const scenarioKey = scenarioKeys[activeScenarioIndex];
+    $("scenario-description").textContent = translate(`scenario.description.${scenarioKey}`);
+    $("scenario-purpose").textContent = translate(scenario.purpose);
+    $("scenario-try-list").innerHTML = scenario.whatToTry.map((key, index) => `<li><span>${index + 1}.</span> ${escapeHtml(translate(key))}</li>`).join("");
     for (const branch of branchDefaults) {
       const input = [...branchControls.querySelectorAll("input")].find(candidate => candidate.dataset.defaultBranchName === branch.id);
       if (!input) continue;
@@ -225,6 +410,7 @@ document.addEventListener?.("click", event => {
       languageBranchNames.set(branch.id, branchName(branch));
     }
     render();
+    renderAnnualProfile();
     refreshSensitivityControls(false);
     if (sensitivityResult) renderSensitivityResult();
     if (sensitivityStaleReason) setSensitivityStale(sensitivityStaleReason);
@@ -268,6 +454,9 @@ function readScenario() {
   return {
     hmpTargetTemp: get("hmp-target"), outdoorTemp: get("outdoor-temp"), networkReturnTemp: get("network-return-temp"),
     referenceNetworkDeltaK: get("network-reference-delta") === "" ? null : get("network-reference-delta"), branches: scenarioBranches,
+    supplyDispatchStrategy: document.body.dataset.mode === "engineer" ? get("supply-dispatch-strategy") : "waste-heat-priority",
+    manualDispatch: { dataCenter: Number(get("manual-dc-dispatch")) * 1000,
+      industrial: Number(get("manual-industrial-dispatch")) * 1000, wastewater: Number(get("manual-wastewater-dispatch")) * 1000 },
     sourceTemperatureStrategy: document.body.dataset.mode === "engineer" ? get("source-temperature-strategy") : "strict", normalPlantSupplyTemp: get("normal-plant-supply"),
     maxRampedPlantSupplyTemp: get("max-ramped-plant-supply"), plantRampCostPerMWhPerK: get("plant-ramp-cost"),
     centralPlant: { supplyTemp: get("plant-temp"), maxPowerMW: get("plant-power"), availabilityPercent: get("plant-availability"), lossToHMP: get("plant-loss") },
@@ -597,7 +786,7 @@ function renderEnergy(result) {
   const total = result.totalDemandKW, dataCenter = result.wasteHeatUsedKW, industrial = result.industrialWasteHeatUsedKW, unserved = result.hmpPowerShortfallKW;
   set("energy-caption", `${fmt(total / 1000, 2)} MW total customer heat demand`);
   const host = $("energy-split"); host.replaceChildren();
-  for (const [label, value, cls] of [["Central plant", result.centralPlantUsedKW, "central-energy"], ["Data-center heat injected", dataCenter, "waste-energy"], ["Industrial waste heat injected", industrial, "industrial-energy"], ["Wastewater heat injected", result.wastewaterHeatUsedKW ?? 0, "wastewater-energy"], ["Unserved thermal requirement", unserved, "unserved-energy"]]) {
+  for (const [label, value, cls] of [["Central plant", result.centralPlantUsedKW, "central-energy"], ["Data-center heat injected", dataCenter, "waste-energy"], ["Industrial waste heat injected", industrial, "industrial-energy"], ["Wastewater heat injected", result.wastewaterHeatUsedKW ?? 0, "wastewater-energy"], ["PIP3 return heat", result.returnHeatForCustomersKW ?? 0, "return-energy"], ["Unserved thermal requirement", unserved, "unserved-energy"]]) {
     const share = total > 0 ? value / total * 100 : 0, row = document.createElement("div"); row.className = `energy-row ${cls}`;
     row.innerHTML = `<div><b>${label}</b><span>${fmt(value / 1000, 2)} MW · ${fmt(share, 1)}%</span></div><div class="energy-track"><i class="${cls}" style="width:${Math.min(100, share)}%"></i></div>`; host.append(row);
   }
@@ -624,16 +813,6 @@ function renderSystemSummary(result, input) {
   const boosterElectricCost = calculateOperatingCost({ electricPowerKW: after.booster.electricalPowerKW }, prices);
 
   set("kpi-hmp-target", `${fmtTemp(after.hmpTargetTemp)} °C`);
-  set("kpi-hmp", `${fmtTemp(after.hmpTargetTemp)} °C`);
-  set("kpi-waste-share", share(after.totalWasteHeatUsedKW));
-  set("kpi-central-share", share(after.centralPlantUsedKW));
-  set("kpi-branch-lift", String(after.branchesNeedingBooster));
-  set("kpi-electricity", `${fmt(metrics.totalSystemElectricKW)} kW`);
-  set("kpi-cost", `${fmt(metrics.operatingCostPerHour, 2)} €/h`);
-  set("kpi-surplus-heat", `${fmt(metrics.surplusHeatKW / 1000, 2)} MW`);
-  set("kpi-flexible-heat", `${fmt(metrics.flexibleSinkHeatKW / 1000, 2)} MW`);
-  set("kpi-curtailed-heat", `${fmt(metrics.curtailedHeatKW / 1000, 2)} MW`);
-  set("kpi-cooling-output", `${fmt(metrics.coolingOutputKW / 1000, 2)} MW`);
 
   set("result-hmp", fmtTemp(after.hmpTargetTemp));
   set("result-hmp-capability", fmtTemp(after.hmpTemperatureCapabilityTemp));
@@ -671,10 +850,17 @@ function renderSystemSummary(result, input) {
     : after.industrialWasteHeat.status === "INJECTING" ? "industry.injecting"
       : after.industrialWasteHeat.status === "UNAVAILABLE" ? "industry.unavailable" : "industry.available_idle"));
   set("map-wastewater-temp", `${fmt(after.wastewaterHeat.sourceTempC)} °C DELIVERED`);
-  set("map-wastewater-contribution", `${fmt(after.wastewaterHeat.contributionTemp)} °C AT HMP · −${fmt(after.wastewaterHeat.lossToHMP)} K`);
+  set("map-wastewater-contribution", `${fmt(after.wastewaterHeat.contributionTemp)} °C AT HMP`);
+  set("map-wastewater-loss", `−${fmt(after.wastewaterHeat.lossToHMP)} K LOSS`);
   set("map-wastewater-power", `${fmt(after.wastewaterHeat.availableKW / 1000, 2)} MW AVAILABLE · ${fmt(after.wastewaterHeat.injectedKW / 1000, 2)} MW USED`);
   set("map-wastewater-status", after.wastewaterHeat.status === "TEMPERATURE BLOCKED" ? "TEMPERATURE BLOCKED"
     : after.wastewaterHeat.status === "INJECTING" ? "INJECTING" : after.wastewaterHeat.status === "UNAVAILABLE" ? "UNAVAILABLE" : "AVAILABLE · IDLE");
+  set("summary-wastewater-used", fmt(after.wastewaterHeat.injectedKW / 1000, 2));
+  set("summary-wastewater-available", fmt(after.wastewaterHeat.availableKW / 1000, 2));
+  set("summary-wastewater-remaining", fmt(Math.max(0, after.wastewaterHeat.availableKW - after.wastewaterHeat.injectedKW) / 1000, 2));
+  set("summary-wastewater-temp", fmtTemp(after.wastewaterHeat.sourceTempC));
+  set("summary-wastewater-hmp-temp", fmtTemp(after.wastewaterHeat.contributionTemp));
+  set("summary-wastewater-status", after.wastewaterHeat.status);
   $("map-wastewater-status").className = `mini-status ${after.wastewaterHeat.status === "INJECTING" ? "eligible" : after.wastewaterHeat.status === "TEMPERATURE BLOCKED" ? "ineligible" : ""}`;
   $("wastewater-node").classList.toggle("source-inactive", after.wastewaterHeat.injectedKW <= 0);
   $("wastewater-feed-pipe").classList.toggle("pipe-blocked", after.wastewaterHeat.injectedKW <= 0);
@@ -706,11 +892,36 @@ function renderSystemSummary(result, input) {
   set("balance-central", `${fmt(after.centralPlantUsedKW / 1000, 2)} MW`);
   set("balance-data-center", `${fmt(after.wasteHeatUsedKW / 1000, 2)} MW`);
   set("balance-industrial", `${fmt(after.industrialWasteHeatUsedKW / 1000, 2)} MW`);
+  set("balance-wastewater", `${fmt(after.wastewaterHeatUsedKW / 1000, 2)} MW`);
+  set("balance-return-heat", `${fmt(after.returnHeatForCustomersKW / 1000, 2)} MW`);
   set("balance-unserved", `${fmt(after.hmpPowerShortfallKW / 1000, 2)} MW`);
   $("balance-unserved-plus").hidden = after.hmpPowerShortfallKW <= 1e-9;
   $("balance-unserved-item").hidden = after.hmpPowerShortfallKW <= 1e-9;
   set("balance-booster-thermal", fmt(after.booster.thermalPowerKW / 1000, 2));
   set("balance-booster-electric", fmt(after.booster.electricalPowerKW, 1));
+  const strategyName = { "waste-heat-priority": "Waste heat priority", "lowest-cost": "Lowest operating cost", "manual-dispatch": "Manual dispatch" }[after.supplyDispatchStrategy];
+  set("snapshot-demand", `${fmt(demand / 1000, 2)} MW`);
+  set("snapshot-central", `${fmt(after.centralPlantUsedKW / 1000, 2)} MW`);
+  set("snapshot-noncentral", `${fmt((after.wasteHeatUsedKW + after.industrialWasteHeatUsedKW + after.wastewaterHeatUsedKW + after.returnHeatForCustomersKW) / 1000, 2)} MW`);
+  set("snapshot-return-heat", `${fmt(after.returnHeatForCustomersKW / 1000, 2)} MW`);
+  set("snapshot-sink-use", `${fmt(metrics.flexibleSinkHeatKW / 1000, 2)} MW`);
+  set("snapshot-curtailed", `${fmt(metrics.curtailedHeatKW / 1000, 2)} MW`);
+  set("snapshot-cost", `${fmt(metrics.operatingCostPerHour, 2)} €/h`);
+  set("snapshot-feasibility", `${after.feasibleAfterCount} / ${after.afterBranches.length}`);
+  set("snapshot-dispatch", strategyName);
+  const dispatch = after.supplyDispatch ?? {};
+  const mixText = `DC ${fmt(dispatch.dataCenter / 1000, 2)} · Industrial ${fmt(dispatch.industrial / 1000, 2)} · Wastewater ${fmt(dispatch.wastewater / 1000, 2)} · Central ${fmt(dispatch.centralPlant / 1000, 2)} MW`;
+  const sourceNames = { dataCenter: "Data Center", industrial: "Industrial", wastewater: "Wastewater", centralPlant: "Central Plant" };
+  const costSearchDetails = after.supplyDispatchStrategy === "lowest-cost"
+    ? `<div>${after.supplyDispatchSearch?.status === "COST ORDER SEARCH NOT APPLIED TO BLENDED SOURCE DISPATCH" ? "Blended source dispatch is active; cost-order search is not applied." : `Search order ${escapeHtml((after.supplyDispatchSearch?.selectedOrder ?? []).map(id => sourceNames[id]).join(" → ") || "not available")}`}</div><small>Source limits: ${escapeHtml(Object.entries(dispatch.dispatchReasons ?? {}).map(([id, reason]) => `${sourceNames[id]}: ${reason}`).join(" · "))}</small>` : "";
+  const dispatchContext = after.supplyDispatchStrategy === "manual-dispatch"
+    ? `<div>Requested / achieved (MW): DC ${fmt(dispatch.requested?.dataCenter / 1000, 2)} / ${fmt(dispatch.dataCenter / 1000, 2)} · Industrial ${fmt(dispatch.requested?.industrial / 1000, 2)} / ${fmt(dispatch.industrial / 1000, 2)} · Wastewater ${fmt(dispatch.requested?.wastewater / 1000, 2)} / ${fmt(dispatch.wastewater / 1000, 2)}</div><small>Clamps: ${escapeHtml(Object.entries(dispatch.clampReasons ?? {}).map(([sourceId, reason]) => `${sourceId}: ${reason}`).join(" · "))}</small>`
+    : `<div>Selected source mix <b>${mixText}</b></div>${after.supplyDispatchStrategy === "lowest-cost" ? `<div>${after.supplyDispatchSearch?.status === "LOWEST COST FEASIBLE DISPATCH FOUND" ? "Lowest cost found" : "Operating cost (dispatch search not applied)"} <b>${fmt(metrics.operatingCostPerHour, 2)} €/h</b> · Electricity ${fmt(metrics.totalSystemElectricKW)} kW</div>${costSearchDetails}` : ""}`;
+  $("summary-dispatch-context").innerHTML = `<article class="system-card"><header><b>${escapeHtml(strategyName)}</b><span>${after.supplyDispatchStrategy === "lowest-cost" ? `${after.supplyDispatchSearch?.candidateCount ?? 0} CANDIDATE ORDERINGS` : "CURRENT OPERATING POINT"}</span></header>${dispatchContext}<div>Flexible sinks ${fmt(metrics.flexibleSinkHeatKW / 1000, 2)} MW · Curtailed ${fmt(metrics.curtailedHeatKW / 1000, 2)} MW</div></article>`;
+  $("summary-return-system").innerHTML = `<article class="system-card"><header><b>RETURN NETWORK</b></header><div>Before recovery <b>${fmt(result.returnNetwork.returnTempBeforeRecoveryC)} °C</b></div><div>At central plant <b>${fmt(result.returnNetwork.returnTempAtPlantC)} °C</b></div><div>Cooling / extraction benefit <b>${fmt(result.returnNetwork.coolingBenefitK)} K</b></div><div>PIP3 heat used <b>${fmt(result.returnNetwork.allocatedKW / 1000, 2)} MW</b></div><div>PIP3 supply top-up <b>${fmt(result.returnNetwork.unservedKW / 1000, 2)} MW</b></div><div>Unused eligible return heat <b>${fmt(result.returnNetwork.unusedSourceKW / 1000, 2)} MW</b></div></article>${result.returnNetwork.sources.filter(item => item.enabled !== false).map(item => `<article class="system-card"><header><b>${escapeHtml(item.name)}</b><span>${item.dispatchedKW > 0 ? "ACTIVE" : item.availableKW > 0 ? "ELIGIBLE · IDLE" : "UNAVAILABLE"}</span></header><div>Source temperature <b>${fmt(item.sourceTempC)} °C</b></div><div>Available <b>${fmt(item.availableKW / 1000, 2)} MW</b></div><div>Dispatched <b>${fmt(item.dispatchedKW / 1000, 2)} MW</b></div><div>Remaining <b>${fmt(item.remainingKW / 1000, 2)} MW</b></div></article>`).join("")}`;
+  const sinks = after.flexibleSinks;
+  $("summary-flexible-sinks").innerHTML = `<article data-ambient-greenhouse class="system-card ambient-sink-summary"><header><b>GREENHOUSE</b><span>${sinks.greenhouse.status}</span></header><div>Used <b>${fmt(sinks.greenhouse.totalHeatKW / 1000, 2)} MW</b> · return ${fmt(sinks.greenhouse.returnHeatKW / 1000, 2)} · supply ${fmt(sinks.greenhouse.supplyHeatKW / 1000, 2)}</div><div>Maximum demand <b>${fmt(Number(input.flexibleSinks.greenhouse.maxDemandKW) / 1000, 2)} MW</b></div><div>Minimum temperature <b>${fmt(sinks.greenhouse.minimumTemperatureC)} °C</b> · mode ${escapeHtml(sinks.greenhouse.connectionMode.toUpperCase())}</div></article><article data-ambient-cooling class="system-card ambient-sink-summary"><header><b>ABSORPTION COOLING</b><span>${sinks.absorptionCooling.status}</span></header><div>Heat input <b>${fmt(sinks.absorptionCooling.heatInputKW / 1000, 2)} MW</b></div><div>Cooling output <b>${fmt(sinks.absorptionCooling.coolingOutputKW / 1000, 2)} MW</b> · thermal COP ${fmt(sinks.absorptionCooling.thermalCOP, 2)}</div><div>Minimum driving temperature <b>${fmt(sinks.absorptionCooling.minimumDrivingTempC)} °C</b></div></article>`;
+  $("summary-surplus-chain").innerHTML = `<span>Eligible surplus <b>${fmt(sinks.surplusHeatKW / 1000, 2)} MW</b></span><i>→</i><span>Flexible sinks <b>${fmt(sinks.flexibleSinkHeatKW / 1000, 2)} MW</b></span><i>→</i><span>Curtailed / unused <b>${fmt(sinks.curtailedHeatKW / 1000, 2)} MW</b></span><span>DISPATCH: ${escapeHtml(strategyName)}</span>`;
   $("normal-cost-electric-power").textContent = fmt(metrics.totalSystemElectricKW);
   $("normal-cost-central").textContent = `${fmt(centralCost, 2)} €/h`;
   $("normal-cost-electric").textContent = `${fmt(calculateOperatingCost({ electricPowerKW: metrics.totalSystemElectricKW }, prices), 2)} €/h`;
@@ -765,7 +976,7 @@ function renderDataCenterModes(result) {
     const deliveredHeatCost = mode.deliveredHeatKW > 0 ? operatingCost / (mode.deliveredHeatKW / 1000) : null;
     const outlet = mode.outletTemp == null ? "NO VALID RANGE" : `${fmt(mode.outletTemp)} °C`;
     const atHMP = mode.contributionTemp == null ? "—" : `${fmt(mode.contributionTemp)} °C`;
-    card.innerHTML = `<header><b>${title}</b><span>${after.wasteHeat.mode === key ? "SELECTED MODE" : "COMPARE"}</span></header><strong class="dc-mode-status">${status}</strong>${key !== "raw-return" && mode.noUpgradeRequired ? `<p class="dc-no-upgrade">NO UPGRADE REQUIRED · Source temperature already meets the requested heat-pump outlet target.</p>` : ""}<div class="dc-mode-values"><div><span>Outlet before loss</span><b>${outlet}</b></div><div><span>${key === "raw-return" ? "HMP contribution" : "Delivered at HMP"}</span><b>${key === "raw-return" ? "0.00 MW" : atHMP}</b></div><div><span>Connection loss</span><b>${key === "raw-return" ? "Not applicable" : `−${fmt(mode.lossToHMP)} K`}</b></div><div><span>Raw source heat</span><b>${fmt(mode.sourceHeatKW / 1000, 2)} MW</b></div>${stageRows}<div><span>Electric input</span><b>${fmt(mode.electricalPowerKW)} kW</b></div><div><span>Heat-pump delivered heat</span><b>${fmt(mode.deliveredHeatKW / 1000, 2)} MW</b></div><div><span>${key === "raw-return" ? "HMP heat injected" : "Heat injected"}</span><b>${fmt(mode.injectedKW / 1000, 2)} MW</b></div><div><span>Total COP</span><b>${mode.totalCOP == null ? "—" : fmt(mode.totalCOP, 2)}</b></div><div><span>${key === "raw-return" ? "Supply route" : "Strict temperature eligibility"}</span><b>${key === "raw-return" ? "INACTIVE · RETURN ONLY" : strictEligible ? "STRICTLY ELIGIBLE" : blendedAccepted ? "STRICTLY BLOCKED · USED VIA BLENDING" : "STRICTLY BLOCKED"}</b></div><div><span>Theoretical operating cost</span><b>${fmt(operatingCost, 2)} €/h</b></div><div><span>Effective delivered heat cost</span><b>${deliveredHeatCost == null ? "—" : `${fmt(deliveredHeatCost, 2)} €/MWh`}</b></div></div>`;
+    card.innerHTML = `<header><b>${title}</b><span>${after.wasteHeat.mode === key ? "SELECTED MODE" : "COMPARE"}</span></header><strong class="dc-mode-status">${status}</strong>${key !== "raw-return" && mode.noUpgradeRequired ? `<p class="dc-no-upgrade">NO UPGRADE REQUIRED · Source temperature already meets the requested heat-pump outlet target.</p>` : ""}<div class="dc-mode-values"><div><span>Outlet before loss</span><b>${outlet}</b></div><div><span>${key === "raw-return" ? "HMP contribution" : "Delivered at HMP"}</span><b>${key === "raw-return" ? "0.00 MW" : atHMP}</b></div><div><span>Connection loss</span><b>${key === "raw-return" ? "Not applicable" : `−${fmt(mode.lossToHMP)} K LOSS`}</b></div><div><span>Raw source heat</span><b>${fmt(mode.sourceHeatKW / 1000, 2)} MW</b></div>${stageRows}<div><span>Electric input</span><b>${fmt(mode.electricalPowerKW)} kW</b></div><div><span>Heat-pump delivered heat</span><b>${fmt(mode.deliveredHeatKW / 1000, 2)} MW</b></div><div><span>${key === "raw-return" ? "HMP heat injected" : "Heat injected"}</span><b>${fmt(mode.injectedKW / 1000, 2)} MW</b></div><div><span>Total COP</span><b>${mode.totalCOP == null ? "—" : fmt(mode.totalCOP, 2)}</b></div><div><span>${key === "raw-return" ? "Supply route" : "Strict temperature eligibility"}</span><b>${key === "raw-return" ? "INACTIVE · RETURN ONLY" : strictEligible ? "STRICTLY ELIGIBLE" : blendedAccepted ? "STRICTLY BLOCKED · USED VIA BLENDING" : "STRICTLY BLOCKED"}</b></div><div><span>Theoretical operating cost</span><b>${fmt(operatingCost, 2)} €/h</b></div><div><span>Effective delivered heat cost</span><b>${deliveredHeatCost == null ? "—" : `${fmt(deliveredHeatCost, 2)} €/MWh`}</b></div></div>`;
     host.append(card);
   }
 }
@@ -779,6 +990,13 @@ function renderComparison(result, comparison) {
     electricPowerKW: state.dataCenterElectricPowerKW + state.booster.electricalPowerKW }, prices)
     + Number(state.plantRampPenaltyPerHour ?? 0) - Number(state.flexibleSinks?.absorptionCooling.coolingRevenuePerHour ?? 0);
   const rows = [
+    ["Supply dispatch strategy", point => ({ "waste-heat-priority": "WASTE HEAT PRIORITY", "lowest-cost": "LOWEST COST FOUND", "manual-dispatch": "MANUAL DISPATCH" })[point.dispatchStrategy] ?? point.dispatchStrategy],
+    ["Lowest-cost dispatch · €/h", point => point.dispatchStrategy === "lowest-cost" ? point.operatingCostPerHour : null],
+    ["Greenhouse heat use · MW", point => point.greenhouseHeatKW / 1000],
+    ["  Greenhouse return / supply · MW", point => `${fmt(point.greenhouseReturnHeatKW / 1000, 2)} / ${fmt(point.greenhouseSupplyHeatKW / 1000, 2)}`],
+    ["Absorption heat input · MW", point => point.absorptionHeatInputKW / 1000],
+    ["Cooling output · MW", point => point.coolingOutputKW / 1000],
+    ["Curtailed surplus heat · MW", point => point.curtailedHeatKW / 1000],
     ["Temperature-critical branches", `${comparison.criticalBefore} / 6`, `${comparison.criticalAfter} / 6`],
     ["Waste heat utilized", `${fmt(result.without.totalWasteHeatUsedKW / 1000, 2)} MW`, `${fmt(result.withBooster.totalWasteHeatUsedKW / 1000, 2)} MW`],
     ["Central heat production", `${fmt(comparison.centralProductionBeforeKW / 1000, 2)} MW`, `${fmt(comparison.centralProductionAfterKW / 1000, 2)} MW`],
@@ -1228,9 +1446,9 @@ function renderAnnualProfile() {
     const hmp = Number(input.hmpTargetTemp);
     const value = (kw) => state ? annualFormat(Number(kw) * Number(bin.hoursPerYear) / 1000) : "—";
     const electric = state ? annualElectricFormat(Number(state.totalElectricKW) * Number(bin.hoursPerYear) / 1000) : "—";
-    return `<tr><td><input class="annual-label-input" data-annual-label="${escapeHtml(bin.id)}" aria-label="${escapeHtml(translate("annual.label"))}" value="${escapeHtml(bin.label)}"></td><td><input class="annual-hours-input" data-annual-hours="${escapeHtml(bin.id)}" type="number" min="0" step="any" value="${escapeHtml(bin.hoursPerYear)}" aria-label="${escapeHtml(translate("annual.hours"))}"></td><td>${Number.isFinite(temp) ? `${fmtTemp(temp)} °C` : "—"}</td><td>${Number.isFinite(hmp) ? `${fmtTemp(hmp)} °C` : "—"}</td><td>${annualStatusLabel(result?.status)}</td><td>${value(state?.usableSupplyHeatKW)}</td><td>${value(state?.centralProductionKW)}</td><td>${electric}</td><td>${state ? `€${fmt(state.operatingCostPerHour * Number(bin.hoursPerYear), 0)}` : "—"}</td><td class="annual-actions"><button type="button" data-annual-action="load" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.load"))}</button><button type="button" data-annual-action="update" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.update"))}</button><button type="button" data-annual-action="duplicate" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.duplicate_short"))}</button><button type="button" data-annual-action="remove" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.remove"))}</button></td></tr>`;
+    return `<tr><td><input class="annual-label-input" data-annual-label="${escapeHtml(bin.id)}" aria-label="${escapeHtml(translate("annual.label"))}" value="${escapeHtml(bin.label)}"></td><td><input class="annual-hours-input" data-annual-hours="${escapeHtml(bin.id)}" type="number" min="0" step="any" value="${escapeHtml(bin.hoursPerYear)}" aria-label="${escapeHtml(translate("annual.hours"))}"></td><td>${Number.isFinite(temp) ? `${fmtTemp(temp)} °C` : "—"}</td><td>${Number.isFinite(hmp) ? `${fmtTemp(hmp)} °C` : "—"}</td><td>${annualStatusLabel(result?.status)}</td><td>${state?.dispatchStrategy ?? "—"}</td><td>${state ? `${fmt(state.returnTemperatureAtPlantC)} °C` : "—"}</td><td>${value(state?.usableSupplyHeatKW)}</td><td>${value(state?.centralProductionKW)}</td><td>${electric}</td><td>${state ? `€${fmt(state.operatingCostPerHour * Number(bin.hoursPerYear), 0)}` : "—"}</td><td class="annual-actions"><button type="button" data-annual-action="load" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.load"))}</button><button type="button" data-annual-action="update" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.update"))}</button><button type="button" data-annual-action="duplicate" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.duplicate_short"))}</button><button type="button" data-annual-action="remove" data-bin="${escapeHtml(bin.id)}">${escapeHtml(translate("annual.remove"))}</button></td></tr>`;
   }).join("");
-  $("annual-bin-rows").innerHTML = rows || `<tr><td colspan="10">${escapeHtml(translate("annual.no_bins"))}</td></tr>`;
+  $("annual-bin-rows").innerHTML = rows || `<tr><td colspan="12">${escapeHtml(translate("annual.no_bins"))}</td></tr>`;
   const hours = profile.bins.reduce((sum, bin) => sum + (Number.isFinite(Number(bin.hoursPerYear)) && Number(bin.hoursPerYear) >= 0 ? Number(bin.hoursPerYear) : 0), 0);
   const delta = hours - 8760;
   $("annual-profile-hours").textContent = translate("annual.total_hours", { hours: fmt(hours, 0) });
@@ -1265,9 +1483,10 @@ function renderAnnualResults() {
     ["annual.usable_heat", t.usableSupplyHeatMWh, "supply"], ["annual.dc_supply_heat", t.dataCenterSupplyHeatMWh, "supply"],
     ["annual.industrial_supply_heat", t.industrialSupplyHeatMWh, "supply"], ["annual.upgraded_supply", t.upgradedSupplyHeatMWh, "supply"],
     ["wastewater.name", t.wastewaterSupplyHeatMWh, "supply"], ["flex.greenhouse", t.greenhouseHeatUseMWh, "supply"],
+    ["Greenhouse supply heat", t.greenhouseSupplyHeatMWh, "supply"], ["Flexible sink heat used", t.flexibleSinkHeatMWh, "supply"],
     ["flex.absorption_cooling", t.absorptionHeatInputMWh, "supply"], ["flex.cooling_output", t.coolingOutputMWh, "supply"],
     ["flex.curtailed_heat", t.curtailedHeatMWh, "supply"],
-    ["annual.raw_return", t.rawReturnHeatMWh, "return"], ["annual.other_return", t.otherReturnHeatMWh, "return"],
+    ["annual.raw_return", t.rawReturnHeatMWh, "return"], ["Supermarket return heat", t.supermarketReturnHeatMWh, "return"], ["annual.other_return", t.otherReturnHeatMWh, "return"],
     ["annual.central_production", t.centralProductionMWh, "supply"], ["annual.gridbooster_heat", t.gridboosterThermalMWh, "supply"],
     ["annual.dc_electricity", t.dataCenterElectricMWh, "electric"], ["annual.booster_electricity", t.gridboosterElectricMWh, "electric"],
     ["annual.total_electricity", t.totalElectricMWh, "electric"], ["annual.supply_topup", t.supplyTopUpMWh, "supply"]
@@ -1552,7 +1771,7 @@ function renderStrategyTable(input, prices) {
     ["Selected data-center path", point => `${point.selectedDataCenterMode.toUpperCase()} · ${point.selectedDataCenterPathUsedViaBlending ? "STRICTLY BLOCKED · USED VIA BLENDING" : point.selectedDataCenterPathEligible ? point.selectedDataCenterPathUsed ? "STRICTLY ELIGIBLE · USED" : "STRICTLY ELIGIBLE · NOT USED" : "STRICTLY BLOCKED"}`]
   ];
   $("strategy-table-body").innerHTML = rows.map(([label, get]) => `<tr><th>${label}</th>${points.map(point => {
-    const value = get(point), display = typeof value === "number" ? fmt(value, label.includes("€/h") ? 2 : label.includes("%") ? 1 : 2) : value;
+    const value = get(point), display = typeof value === "number" ? fmt(value, label.includes("€/h") ? 2 : label.includes("%") ? 1 : 2) : value ?? "—";
     return `<td class="${columnStatus(point)}" title="${displaySourceStatus(point.operatingPointStatus)}">${display}</td>`;
   }).join("")}</tr>`).join("");
 }
@@ -1672,6 +1891,10 @@ function loadSnapshot(snapshot) {
     "network-reference-delta": input.referenceNetworkDeltaK ?? "", "source-temperature-strategy": input.sourceTemperatureStrategy,
     "normal-plant-supply": input.normalPlantSupplyTemp, "max-ramped-plant-supply": input.maxRampedPlantSupplyTemp,
     "plant-ramp-cost": input.plantRampCostPerMWhPerK,
+    "supply-dispatch-strategy": input.supplyDispatchStrategy ?? "waste-heat-priority",
+    "manual-dc-dispatch": Number(input.manualDispatch?.dataCenter ?? 0) / 1000,
+    "manual-industrial-dispatch": Number(input.manualDispatch?.industrial ?? 0) / 1000,
+    "manual-wastewater-dispatch": Number(input.manualDispatch?.wastewater ?? 0) / 1000,
     "plant-temp": input.centralPlant.supplyTemp, "plant-power": input.centralPlant.maxPowerMW,
     "plant-availability": input.centralPlant.availabilityPercent, "plant-loss": input.centralPlant.lossToHMP,
     "dc-temp": input.wasteHeat.injectionTemp, "dc-power": input.wasteHeat.maxPowerMW, "dc-availability": input.wasteHeat.availabilityPercent,
@@ -1700,6 +1923,7 @@ function loadSnapshot(snapshot) {
     "industrial-availability": input.industrialWasteHeat?.availabilityPercent ?? 100,
     "industrial-loss": input.industrialWasteHeat?.lossToHMP ?? 1 };
   for (const [id, value] of Object.entries(direct)) setControlValue(id, value);
+  $("manual-dispatch-controls").hidden = (input.supplyDispatchStrategy ?? "waste-heat-priority") !== "manual-dispatch";
   for (const field of branchControls.querySelectorAll("input[data-branch][data-key]")) {
     const branch = input.branches.find(item => item.id === field.dataset.branch);
     const node = (input.returnNetwork?.nodes ?? []).find(item => item.id === field.dataset.branch);
@@ -1848,6 +2072,14 @@ const sensitivityMetricInfo = {
   totalElectricity: { label: "sensitivity.metric.total_electricity", key: "totalElectricity", unit: "kW", digits: 0 },
   boosterElectricity: { label: "sensitivity.metric.booster_electricity", key: "boosterElectricity", unit: "kW", digits: 0 },
   boosterDuty: { label: "sensitivity.metric.booster_duty", key: "boosterDuty", unit: "MW", digits: 2, scale: 0.001 },
+  returnHeat: { label: "sensitivity.metric.return_heat", key: "returnHeat", unit: "MW", digits: 2, scale: 0.001 },
+  supplyTopUp: { label: "sensitivity.metric.supply_top_up", key: "supplyTopUp", unit: "MW", digits: 2, scale: 0.001 },
+  returnTempAtPlant: { label: "sensitivity.metric.return_temp_at_plant", key: "returnTempAtPlant", unit: "°C", digits: 1 },
+  greenhouseHeat: { label: "sensitivity.metric.greenhouse_heat", key: "greenhouseHeat", unit: "MW", digits: 2, scale: 0.001 },
+  absorptionHeatInput: { label: "sensitivity.metric.absorption_heat", key: "absorptionHeatInput", unit: "MW", digits: 2, scale: 0.001 },
+  coolingOutput: { label: "sensitivity.metric.cooling_output", key: "coolingOutput", unit: "MW", digits: 2, scale: 0.001 },
+  curtailedHeat: { label: "sensitivity.metric.curtailed_heat", key: "curtailedHeat", unit: "MW", digits: 2, scale: 0.001 },
+  availableSurplus: { label: "sensitivity.metric.available_surplus", key: "availableSurplus", unit: "MW", digits: 2, scale: 0.001 },
   constrainedBranches: { label: "sensitivity.metric.constrained_branches", key: "constrainedBranches", unit: "", digits: 0 }
 };
 const sensitivityStatusKey = status => ({ SUPPORTED: "sensitivity.status_supported", "TEMPERATURE UNSUPPORTED": "sensitivity.status_temperature", "CAPACITY SHORTFALL": "sensitivity.status_capacity", INVALID: "sensitivity.invalid" })[status] ?? "sensitivity.invalid";
@@ -1959,14 +2191,14 @@ function renderSensitivityResult() {
   $("sensitivity-local").innerHTML = local
     ? "<b>" + escapeHtml(translate("sensitivity.local")) + "</b><div>" + escapeHtml(translate("sensitivity.lower_side")) + ": " + fmt(local.lower.value, 2) + " " + escapeHtml(result.spec.unit) + " · " + sensitivityDelta(local.lower.metrics[info.key], baselineValue, info) + "</div><div>" + escapeHtml(translate("sensitivity.upper_side")) + ": " + fmt(local.upper.value, 2) + " " + escapeHtml(result.spec.unit) + " · " + sensitivityDelta(local.upper.metrics[info.key], baselineValue, info) + "</div>" + (local.asymmetric ? "<strong>" + escapeHtml(translate("sensitivity.nonlinear")) + "</strong>" : "")
     : "<b>" + escapeHtml(translate("sensitivity.local")) + "</b><span>—</span>";
-  const metricOrder = ["operatingCost", "usableHeat", "centralProduction", "totalElectricity", "boosterElectricity", "constrainedBranches"];
-  const units = ["€/h", "MW", "MW", "kW", "kW", ""], digits = [2, 2, 2, 0, 0, 0], scales = [1, 0.001, 0.001, 1, 1, 1];
-  $("sensitivity-table-head").innerHTML = "<tr><th>" + escapeHtml(translate("sensitivity.variable")) + "</th><th>" + escapeHtml(translate("sensitivity.status")) + "</th>" + ["sensitivity.metric.operating_cost", "sensitivity.metric.usable_heat", "sensitivity.metric.central_production", "sensitivity.metric.total_electricity", "sensitivity.metric.booster_electricity", "sensitivity.metric.constrained_branches", "analysis.primary_constraint_short"].map(key => "<th>" + escapeHtml(translate(key)) + "</th>").join("") + "</tr>";
+  const metricOrder = ["operatingCost", "usableHeat", "centralProduction", "totalElectricity", "boosterElectricity", "returnHeat", "supplyTopUp", "returnTempAtPlant", "greenhouseHeat", "absorptionHeatInput", "coolingOutput", "availableSurplus", "curtailedHeat", "constrainedBranches"];
+  $("sensitivity-table-head").innerHTML = "<tr><th>" + escapeHtml(translate("sensitivity.variable")) + "</th><th>" + escapeHtml(translate("sensitivity.status")) + "</th>" + metricOrder.map(key => "<th>" + escapeHtml(translate(sensitivityMetricInfo[key].label)) + "</th>").join("") + "<th>" + escapeHtml(translate("analysis.primary_constraint_short")) + "</th></tr>";
   $("sensitivity-table-body").innerHTML = result.points.map(point => {
     const m = point.metrics ?? {};
     const cells = metricOrder.map((key, index) => {
       const value = m[key], baseline = result.baseline.metrics[key];
-      return "<td>" + (Number.isFinite(value) ? fmt(value * scales[index], digits[index]) + (units[index] ? " " + units[index] : "") + "<small>" + escapeHtml(sensitivityDelta(value, baseline, { digits: digits[index], unit: units[index], scale: scales[index] })) + "</small>" : "—") + "</td>";
+      const metric = sensitivityMetricInfo[key];
+      return "<td>" + (Number.isFinite(value) ? fmt(value * (metric.scale ?? 1), metric.digits) + (metric.unit ? " " + metric.unit : "") + "<small>" + escapeHtml(sensitivityDelta(value, baseline, metric)) + "</small>" : "—") + "</td>";
     }).join("");
     return "<tr><td>" + fmt(point.value, 2) + " " + escapeHtml(result.spec.unit) + "</td><td>" + escapeHtml(translate(sensitivityStatusKey(point.status))) + "</td>" + cells + "<td>" + escapeHtml(sensitivityPrimaryLabel(point.primary, point.status)) + "</td></tr>";
   }).join("");
@@ -2070,7 +2302,7 @@ function renderReturnHeat(result) {
     const supplyTopUp = consumer ? `SUPPLY TOP-UP ${fmt((node.supplyTopUpKW ?? Math.max(0, node.demandKW - node.allocatedKW)) / 1000, 2)} MW` : "";
     const stateLabel = consumer ? node.eligibilityStatus ?? node.status : "";
     const ordinaryBranch = node.type === "RETURN_BRANCH";
-    return `<div class="return-node ${source ? "injection-node" : consumer ? "extraction-node" : "ordinary-return-node"}${ordinaryBranch ? " two-pipe-return-node" : ""}${node.id === "SM-1" ? " supermarket-return-node" : ""}" ${source || consumer ? `data-return-object="${source ? node.id === "SM-1" ? "supermarket" : "source" : "pip3"}" data-node-id="${node.id}" tabindex="0" role="button"` : ""}>${icon}<b>${escapeHtml(node.name).toUpperCase()}</b><strong>${fmt(node.inletTempC)} °C <i>←</i> ${fmt(node.outletTempC)} °C</strong><small>${temperatureLine}</small><small>${power}</small>${consumer ? `<small>${maxShare} · ${actualShare}</small><small>${supplyTopUp}</small>` : ""}<em>${status}</em>${eligibility ? `<small class="topology-warning">${eligibility}</small>` : ""}${stateLabel ? `<small class="return-eligibility-state">${stateLabel}</small>` : ordinaryBranch ? "<small>TWO-PIPE · SUPPLY ONLY</small>" : ""}<small class="engineer-only">ORDER ${fmt(node.order, 0)} · FLOW ${fmt(node.returnFlowM3h ?? state.returnFlowM3h, 0)} m³/h</small>${showWhy ? `<button type="button" class="network-why-button" data-inspect-kind="${source ? node.id === "SM-1" ? "supermarket" : "source" : "pip3"}" data-i18n="interaction.why">WHY?</button>` : ""}</div>`;
+    return `<div class="return-node ${source ? "injection-node" : consumer ? "extraction-node" : "ordinary-return-node"}${ordinaryBranch ? " two-pipe-return-node" : ""}${node.id === "SM-1" ? " supermarket-return-node" : ""}" ${source || consumer ? `data-return-object="${source ? node.id === "SM-1" ? "supermarket" : "source" : "pip3"}" data-node-id="${node.id}" tabindex="0" role="button"` : ""}>${icon}<b>${escapeHtml(node.name).toUpperCase()}</b><strong>${fmt(node.outletTempC)} °C <i>←</i> ${fmt(node.inletTempC)}</strong><small>${temperatureLine}</small><small>${power}</small>${consumer ? `<small>${maxShare} · ${actualShare}</small><small>${supplyTopUp}</small>` : ""}<em>${status}</em>${eligibility ? `<small class="topology-warning">${eligibility}</small>` : ""}${stateLabel ? `<small class="return-eligibility-state">${stateLabel}</small>` : ordinaryBranch ? "<small>TWO-PIPE · SUPPLY ONLY</small>" : ""}<small class="engineer-only">ORDER ${fmt(node.order, 0)} · FLOW ${fmt(node.returnFlowM3h ?? state.returnFlowM3h, 0)} m³/h</small>${showWhy ? `<button type="button" class="network-why-button" data-inspect-kind="${source ? node.id === "SM-1" ? "supermarket" : "source" : "pip3"}" data-i18n="interaction.why">WHY?</button>` : ""}</div>`;
   }).join(`<span class="return-flow-arrow" aria-hidden="true">←</span>`);
   for (const node of $("return-pipe").querySelectorAll("[data-return-object]")) {
     const selected = node.dataset.returnObject === "pip3" && node.dataset.nodeId === selectedPip3Branch;
@@ -2108,8 +2340,11 @@ function renderReturnTopologyEditor(state) {
   for (let index = 0; index <= sequence.length; index++) {
     const target = document.createElement("button");
     target.type = "button"; target.className = "return-snap-target"; target.dataset.returnSlot = String(index);
-    target.setAttribute("aria-label", index < sequence.length ? translate("return.before_node", { node: sequence[index].name }) : translate("return.after_last"));
-    target.textContent = index < sequence.length ? translate("return.before_node", { node: sequence[index].name.toUpperCase() }) : translate("return.after_last");
+    const targetLabel = index < sequence.length ? translate("return.before_node", { node: sequence[index].name }) : translate("return.after_last");
+    target.setAttribute("aria-label", targetLabel);
+    const next = sequence[index];
+    target.textContent = next ? `BEFORE ${next.type === "THREE_PIPE_CONSUMER" ? `PIP3 ${next.id}` : next.type === "WASTE_HEAT_SOURCE" ? "DC RETURN" : next.id}` : "AFTER LAST";
+    target.title = targetLabel;
     if (index === slot) {
       sourceNode.classList.toggle("selected", supermarketTopologySelected);
       sourceNode.setAttribute("aria-pressed", String(supermarketTopologySelected));
@@ -2156,6 +2391,7 @@ function moveSupermarketToSlot(slotIndex) {
   $("sm-order").value = String(order);
   supermarketTopologySelected = false;
   recalculate();
+  positionSupermarketEggBubble();
 }
 
 function renderFullSystem(result, input) {
@@ -2181,6 +2417,11 @@ function renderFullSystem(result, input) {
   $("full-dc-mode").textContent = rawReturnMode ? "RAW RETURN" : `${after.wasteHeat.mode === "one-stage" ? "ONE-STAGE" : "TWO-STAGE"} SUPPLY`;
   $("full-dc-status").textContent = after.wasteHeat.mode === "raw-return" ? "RETURN ONLY" : "SUPPLY/HMP ONLY";
   $("full-dc-allocation").textContent = rawReturnMode ? "RAW WASTE HEAT → RETURN" : "UPGRADED HEAT → SUPPLY/HMP";
+  $("full-dc-power-line").textContent = rawReturnMode
+    ? `RAW SOURCE ${fmt(after.wasteHeat.sourceHeatKW / 1000, 2)} MW · DISPATCHED RETURN ${fmt((dataCenterReturn?.dispatchedKW ?? 0) / 1000, 2)} MW`
+    : `RAW SOURCE ${fmt(after.wasteHeat.sourceHeatKW / 1000, 2)} MW · HP DELIVERED ${fmt(after.wasteHeat.deliveredHeatKW / 1000, 2)} MW · INJECTED ${fmt(after.wasteHeat.injectedKW / 1000, 2)} MW`;
+  $("full-dc-electric-line").textContent = rawReturnMode ? "HP ELECTRIC INPUT 0 MW" : `HP ELECTRIC INPUT ${fmt(after.wasteHeat.electricalPowerKW / 1000, 2)} MW`;
+  $("full-dc-cop-line").textContent = rawReturnMode ? "COMBINED COP —" : `COMBINED COP ${fmt(after.wasteHeat.totalCOP, 2)}`;
   $("full-dc-loss").textContent = `−${fmt(after.wasteHeat.lossToHMP)} K LOSS`;
   $("full-dc-return-label").textContent = after.wasteHeat.mode === "raw-return" ? `RAW RETURN · +${fmt((dataCenterReturn?.dispatchedKW ?? 0) / 1000, 2)} MW` : "RAW RETURN · INACTIVE";
   const industrial = after.industrialWasteHeat;
@@ -2192,7 +2433,10 @@ function renderFullSystem(result, input) {
       : industrial.status === "UNAVAILABLE" ? translate("industry.unavailable") : translate("industry.available_idle");
   const wastewater = after.wastewaterHeat;
   $("full-wastewater-temp").textContent = `${fmt(wastewater.sourceTempC)} °C DELIVERED`;
-  $("full-wastewater-contribution").textContent = `${fmt(wastewater.contributionTemp)} °C AT HMP · −${fmt(wastewater.lossToHMP)} K`;
+  $("full-wastewater-contribution").textContent = `${fmt(wastewater.contributionTemp)} °C AT HMP`;
+  $("full-wastewater-loss").textContent = `−${fmt(wastewater.lossToHMP)} K LOSS`;
+  $("full-industrial-loss").textContent = `−${fmt(industrial.lossToHMP)} K LOSS`;
+  $("full-plant-loss").textContent = `−${fmt(after.centralPlant.lossToHMP)} K LOSS`;
   $("full-wastewater-power").textContent = `${fmt(wastewater.availableKW / 1000, 2)} MW AVAILABLE · ${fmt(wastewater.injectedKW / 1000, 2)} MW USED`;
   $("full-wastewater-status").textContent = translate(wastewater.status === "TEMPERATURE BLOCKED" ? "industry.temperature_blocked"
     : wastewater.status === "INJECTING" ? "industry.injecting" : wastewater.status === "UNAVAILABLE" ? "industry.unavailable" : "industry.available_idle");
@@ -2390,6 +2634,7 @@ function render(result, input) {
   renderSystemSummary(result, input);
   renderProfile(after); renderBranchComparison(after); renderEnergy(after); renderDataCenterModes(result); renderComparison(result, result.comparison);
   if (document.body.dataset.mode === "demo") renderGuidedDemo(input, latestNetworkState);
+  applyAmbientVisualStates();
 }
 
 function renderCasualResults(result, input) {
@@ -2445,6 +2690,7 @@ function recalculate() {
       }
     }
     latestNetworkState = result;
+    updateEngineeringEasterEggs(result, input, prices);
     if (document.body.dataset.mode === "demo" && guidedDemoLayer === "technical") updateGuidedDemoProgress();
     const comparisonView = document.body.dataset.mode === "demo" && demoComparisonBaseline
       ? simulateNetwork(guidedDemoInputs(input, 90, []), prices) : result;
@@ -2454,6 +2700,10 @@ function recalculate() {
 }
 
 function loadScenario(index) {
+  activeScenarioIndex = index;
+  demo6Baseline = null;
+  demo6ImprovementFired = false;
+  $("demo6-improvement-marker").hidden = true;
   const scenario = scenarios[index];
   const pip3 = scenario.pip3 ?? {};
   const branchOrders = { A: 70, B: 60, C: 50, D: 40, E: 30, F: 20,
@@ -2480,6 +2730,9 @@ function loadScenario(index) {
   $("network-return-temp").value = scenario.networkReturnTemp ?? 40;
   $("network-reference-delta").value = scenario.referenceNetworkDeltaK ?? "";
   $("source-temperature-strategy").value = "strict";
+  $("supply-dispatch-strategy").value = scenario.supplyDispatchStrategy ?? "waste-heat-priority";
+  for (const [id, value] of [["manual-dc-dispatch", 0], ["manual-industrial-dispatch", 0], ["manual-wastewater-dispatch", 0]]) $(id).value = String(value);
+  $("manual-dispatch-controls").hidden = $("supply-dispatch-strategy").value !== "manual-dispatch";
   $("normal-plant-supply").value = scenario.plantTemp;
   $("max-ramped-plant-supply").value = Number(scenario.plantTemp) + 15;
   for (const [id, key] of [["hmp-target", "hmp"], ["outdoor-temp", "outdoor"], ["plant-temp", "plantTemp"], ["plant-power", "plantPower"], ["plant-availability", "plantAvailability"], ["plant-loss", "plantLoss"], ["dc-mode", "dcMode"], ["dc-temp", "dcTemp"], ["dc-power", "dcPower"], ["dc-availability", "dcAvailability"], ["dc-loss", "dcLoss"], ["industrial-temp", "industrialTemp"], ["industrial-power", "industrialPower"], ["industrial-availability", "industrialAvailability"], ["industrial-loss", "industrialLoss"], ["booster-branch", "branch"], ["booster-mode", "mode"], ["booster-setpoint", "setpoint"], ["network-cop", "cop"], ["booster-capacity", "capacity"], ["dc-single-temp", "singleTemp"], ["dc-single-cop", "singleCOP"], ["dc-stage1-temp", "stage1Temp"], ["dc-stage1-cop", "stage1COP"], ["dc-stage2-temp", "stage2Temp"], ["dc-stage2-cop", "stage2COP"]]) $(id).value = String(id === "booster-capacity" ? Number(scenario[key]) / 1000 : scenario[key]);
@@ -2501,13 +2754,19 @@ function loadScenario(index) {
     return match ? Number(match[1]) + 1 : 1;
   }));
   $("comparison-temp-input").value = scenario.hmp;
-  $("scenario-description").textContent = scenario.description;
+  $("scenario-description").textContent = translate(`scenario.description.${["one", "two", "three", "four", "five", "six"][index]}`);
   $("scenario-purpose").textContent = translate(scenario.purpose);
   $("scenario-try-list").innerHTML = scenario.whatToTry.map((key, index) => `<li><span>${index + 1}.</span> ${escapeHtml(translate(key))}</li>`).join("");
   casualBaseline = { input: JSON.parse(JSON.stringify(readScenario())), prices: { ...flexPrices() } };
   selectedBoosterId = "";
   updatePip3Controls();
   renderBoosterTray(); recalculate();
+  if (index === 5) {
+    const baselineInput = readScenario(), baselinePrices = flexPrices();
+    const baselineResult = document.body.dataset.mode === "demo" ? simulateNetwork(baselineInput, baselinePrices) : latestNetworkState;
+    const baselineMetrics = summarizeNetworkFlexState(baselineResult, baselineInput, baselinePrices);
+    demo6Baseline = captureSurplusChallengeBaseline(baselineMetrics, baselineResult.withBooster.centralPlantUsedKW);
+  }
 }
 
 $("booster-mode").addEventListener("change", () => {
@@ -2566,14 +2825,18 @@ $("network-map").addEventListener("click", event => {
 });
 $("network-map").addEventListener("dragstart", event => {
   if (!event.target.closest?.("#full-sm-node") || document.body.dataset.mode !== "engineer") return;
+  supermarketDraggedAt = Date.now();
   event.dataTransfer?.setData("text/plain", "SM-1");
   event.target.closest("#full-sm-node").classList.add("dragging");
   $("return-topology-editor").classList.add("editing-return-topology");
 });
 $("network-map").addEventListener("dragend", event => {
+  if (event.target.closest?.("#full-sm-node")) supermarketDraggedAt = Date.now();
   event.target.closest?.("#full-sm-node")?.classList.remove("dragging");
+  positionSupermarketEggBubble();
   $("return-topology-editor").classList.toggle("editing-return-topology", supermarketTopologySelected);
 });
+$("full-sm-node").addEventListener("click", countSupermarketClicks);
 $("network-map").addEventListener("dragover", event => {
   if (event.target.closest?.("[data-return-slot]") && document.body.dataset.mode === "engineer") event.preventDefault();
 });
@@ -2647,6 +2910,11 @@ $("guided-story-activate").addEventListener("click", () => {
   if (activateGuidedDemoBooster()) setGuidedStoryStep(4);
 });
 $("hmp-target-slider").addEventListener("input", () => { $("hmp-target").value = $("hmp-target-slider").value; recalculate(); });
+$("show-operating-point-details").addEventListener("click", () => {
+  const details = $("operating-point-details");
+  details.open = true;
+  details.scrollIntoView({ behavior: "smooth", block: "start" });
+});
 $("hmp-chart-metric").addEventListener("change", () => {
   const selected = $("hmp-chart-metric").value;
   for (const panel of document.querySelectorAll("[data-hmp-chart]")) panel.hidden = panel.dataset.hmpChart !== selected;
@@ -2656,7 +2924,11 @@ $("hmp-target").addEventListener("input", () => {
   if (value >= 70 && value <= 95) $("hmp-target-slider").value = String(value);
   recalculate();
 });
-for (const id of ["outdoor-temp", "network-return-temp", "network-reference-delta", "plant-temp", "plant-power", "plant-availability", "plant-loss", "dc-temp", "dc-power", "dc-return-max-injection", "dc-availability", "dc-loss", "industrial-temp", "industrial-power", "industrial-availability", "industrial-loss", "wastewater-temp", "wastewater-power", "wastewater-availability", "wastewater-loss", "greenhouse-demand", "greenhouse-min-temp", "absorption-capacity", "absorption-min-temp", "absorption-cop", "dc-mode", "dc-single-temp", "dc-single-cop", "dc-stage1-temp", "dc-stage1-cop", "dc-stage2-temp", "dc-stage2-cop", "booster-branch", "booster-setpoint", "network-cop", "booster-capacity", "source-temperature-strategy", "normal-plant-supply", "max-ramped-plant-supply", "plant-ramp-cost"]) $(id).addEventListener("input", recalculate);
+$("engineering-easter-dismiss").addEventListener("click", dismissEngineeringEasterEgg);
+for (const id of ["outdoor-temp", "network-return-temp", "network-reference-delta", "plant-temp", "plant-power", "plant-availability", "plant-loss", "dc-temp", "dc-power", "dc-return-max-injection", "dc-availability", "dc-loss", "industrial-temp", "industrial-power", "industrial-availability", "industrial-loss", "wastewater-temp", "wastewater-power", "wastewater-availability", "wastewater-loss", "greenhouse-demand", "greenhouse-min-temp", "absorption-capacity", "absorption-min-temp", "absorption-cop", "dc-mode", "dc-single-temp", "dc-single-cop", "dc-stage1-temp", "dc-stage1-cop", "dc-stage2-temp", "dc-stage2-cop", "booster-branch", "booster-setpoint", "network-cop", "booster-capacity", "source-temperature-strategy", "supply-dispatch-strategy", "manual-dc-dispatch", "manual-industrial-dispatch", "manual-wastewater-dispatch", "normal-plant-supply", "max-ramped-plant-supply", "plant-ramp-cost"]) $(id).addEventListener("input", () => {
+  if (id === "supply-dispatch-strategy") $("manual-dispatch-controls").hidden = $(id).value !== "manual-dispatch";
+  recalculate();
+});
 for (const id of ["wastewater-enabled", "greenhouse-enabled", "greenhouse-mode", "absorption-enabled"]) {
   $(id).addEventListener("input", recalculate);
   $(id).addEventListener("change", recalculate);
