@@ -5,7 +5,7 @@ import {
   isReturnSourceAvailableToConsumer,
   lowestSupportedPoint,
   summarizeNetworkFlexState
-} from "./network-model.js?v=20261014-1";
+} from "./network-model.js?v=20261023-1";
 
 const clone = value => globalThis.structuredClone
   ? structuredClone(value)

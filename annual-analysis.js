@@ -1,5 +1,5 @@
-import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261014-1";
-import { analyzeSystemOpportunity, createScenarioSnapshot, restoreScenarioSnapshot } from "./network-insights.js?v=20261014-1";
+import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261023-1";
+import { analyzeSystemOpportunity, createScenarioSnapshot, restoreScenarioSnapshot } from "./network-insights.js?v=20261023-1";
 
 const clone = value => globalThis.structuredClone ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 const finite = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -77,12 +77,19 @@ function calculateOperatingBin(bin) {
       wastewaterSupplyHeatKW: point.wastewaterHeatUsedKW + point.wastewaterFlexibleHeatUsedKW,
       greenhouseHeatUseKW: operating.flexibleSinks?.greenhouse.totalHeatKW ?? 0,
       greenhouseReturnHeatKW: operating.flexibleSinks?.greenhouse.returnHeatKW ?? 0,
+      greenhouseSupplyHeatKW: operating.flexibleSinks?.greenhouse.supplyHeatKW ?? 0,
       absorptionHeatInputKW: operating.flexibleSinks?.absorptionCooling.heatInputKW ?? 0,
       coolingOutputKW: operating.flexibleSinks?.absorptionCooling.coolingOutputKW ?? 0,
       curtailedHeatKW: operating.flexibleSinks?.curtailedHeatKW ?? 0,
       surplusHeatKW: operating.flexibleSinks?.surplusHeatKW ?? 0,
+      flexibleSinkHeatKW: operating.flexibleSinks?.flexibleSinkHeatKW ?? 0,
       rawReturnHeatKW: pip3BySourceKW["DC-RETURN"] ?? 0,
       otherReturnHeatKW: returnHeatKW - (pip3BySourceKW["DC-RETURN"] ?? 0),
+      supermarketReturnHeatKW: pip3BySourceKW["SM-1"] ?? 0,
+      returnTemperatureBeforeRecoveryC: state.returnNetwork.returnTempBeforeRecoveryC,
+      returnTemperatureAtPlantC: state.returnNetwork.returnTempAtPlantC,
+      dispatchStrategy: input.supplyDispatchStrategy ?? "waste-heat-priority",
+      selectedSourceMixKW: { ...(operating.supplyDispatch ?? {}) },
       availableUpgradedSupplyHeatKW: point.dataCenterDeliveredHeatKW,
       upgradedSupplyHeatKW: point.dataCenterInjectedHeatKW,
       centralProductionKW: point.centralPlantActualKW,
@@ -128,7 +135,8 @@ export function calculateAnnualProfile(profile) {
   const totals = { supportedHours: 0, temperatureUnsupportedHours: 0, branchTemperatureConstraintHours: 0,
     capacityShortfallHours: 0, invalidHours: 0, pip3BySourceMWh: {},
     usableSupplyHeatMWh: 0, totalWasteHeatUsedMWh: 0, dataCenterSupplyHeatMWh: 0, industrialSupplyHeatMWh: 0, wastewaterSupplyHeatMWh: 0,
-    greenhouseHeatUseMWh: 0, greenhouseReturnHeatMWh: 0, absorptionHeatInputMWh: 0, coolingOutputMWh: 0, surplusHeatMWh: 0, curtailedHeatMWh: 0,
+    greenhouseHeatUseMWh: 0, greenhouseReturnHeatMWh: 0, greenhouseSupplyHeatMWh: 0, flexibleSinkHeatMWh: 0,
+    supermarketReturnHeatMWh: 0, absorptionHeatInputMWh: 0, coolingOutputMWh: 0, surplusHeatMWh: 0, curtailedHeatMWh: 0,
     availableUpgradedSupplyHeatMWh: 0, rawReturnHeatMWh: 0,
     upgradedSupplyHeatMWh: 0, otherReturnHeatMWh: 0, sourceHeatUsedMWh: 0,
     centralProductionMWh: 0, gridboosterThermalMWh: 0, gridboosterElectricMWh: 0, dataCenterElectricMWh: 0,
@@ -162,7 +170,9 @@ export function calculateAnnualProfile(profile) {
     for (const [target, kw] of [["usableSupplyHeatMWh", m.usableSupplyHeatKW], ["totalWasteHeatUsedMWh", m.totalWasteHeatUsedKW],
       ["dataCenterSupplyHeatMWh", m.dataCenterSupplyHeatKW], ["industrialSupplyHeatMWh", m.industrialSupplyHeatKW],
       ["wastewaterSupplyHeatMWh", m.wastewaterSupplyHeatKW], ["greenhouseHeatUseMWh", m.greenhouseHeatUseKW],
-      ["greenhouseReturnHeatMWh", m.greenhouseReturnHeatKW], ["absorptionHeatInputMWh", m.absorptionHeatInputKW],
+      ["greenhouseReturnHeatMWh", m.greenhouseReturnHeatKW], ["greenhouseSupplyHeatMWh", m.greenhouseSupplyHeatKW],
+      ["flexibleSinkHeatMWh", m.flexibleSinkHeatKW], ["supermarketReturnHeatMWh", m.supermarketReturnHeatKW],
+      ["absorptionHeatInputMWh", m.absorptionHeatInputKW],
       ["coolingOutputMWh", m.coolingOutputKW], ["surplusHeatMWh", m.surplusHeatKW], ["curtailedHeatMWh", m.curtailedHeatKW],
       ["availableUpgradedSupplyHeatMWh", m.availableUpgradedSupplyHeatKW], ["rawReturnHeatMWh", m.rawReturnHeatKW],
       ["upgradedSupplyHeatMWh", m.upgradedSupplyHeatKW], ["otherReturnHeatMWh", m.otherReturnHeatKW],

@@ -1,5 +1,5 @@
-import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261014-1";
-import { analyzeSystemOpportunity } from "./network-insights.js?v=20261014-1";
+import { simulateNetwork, summarizeNetworkFlexState } from "./network-model.js?v=20261023-1";
+import { analyzeSystemOpportunity } from "./network-insights.js?v=20261023-1";
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const round = value => Number(Number(value).toFixed(8));
@@ -110,7 +110,11 @@ function pointMetrics(state, input, prices) {
       centralProduction: safe(summary.centralPlantActualKW), totalElectricity: safe(summary.totalSystemElectricKW),
       boosterElectricity: safe(summary.installedBoosterElectricKW), boosterDuty: safe(summary.installedBoosterThermalKW),
       constrainedBranches: constrained.length, branchesRequiringBooster: summary.branchesRequiringBooster,
-      returnHeat: safe(returnHeat), supplyTopUp: safe(topUp), returnTempAtPlant: safe(ret.returnTempAtPlantC) },
+      returnHeat: safe(returnHeat), supplyTopUp: safe(topUp), returnTempAtPlant: safe(ret.returnTempAtPlantC),
+      greenhouseHeat: safe(summary.greenhouseHeatKW), greenhouseReturnHeat: safe(summary.greenhouseReturnHeatKW),
+      greenhouseSupplyHeat: safe(summary.greenhouseSupplyHeatKW), absorptionHeatInput: safe(summary.absorptionHeatInputKW),
+      coolingOutput: safe(summary.coolingOutputKW), availableSurplus: safe(summary.surplusHeatKW),
+      curtailedHeat: safe(summary.curtailedHeatKW) },
     flags: { sourceEligible: Boolean(summary.selectedDataCenterPathEligible), industrialSourceEligible: Boolean(summary.industrialWasteHeatTemperatureEligible), activeBoosters: summary.activeBoosterCount,
       boosterCapacitySufficient: state.withBooster.booster.capacitySufficient, supported: summary.networkOperatingPointSupported,
       constrainedBranches: constrained, returnConsumers: ret.consumers.map(consumer => ({ id: consumer.id,
